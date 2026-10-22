@@ -129,8 +129,10 @@ What it found:
   are still counted as posts, and that's a documented gap.
 - Role families stay at 70%: posts listing many roles are the hard case for rules.
 
-How far to trust these numbers: labels were drafted by Claude and are being spot-checked
-by a human (20 of 50). The fixes were made after seeing these posts, so "after" scores are
+How far to trust these numbers: labels were drafted by Claude, and a human then
+spot-checked 20 of the 50. The reviewer agreed with 18 posts as labeled and corrected one
+field on each of the other 2, both seniority (158 of 160 fields agreed, 99%). The
+corrections are applied before scoring. The fixes were made after seeing these posts, so "after" scores are
 optimistic. As an out-of-sample check, 12 randomly chosen posts whose labels changed,
 none of them in the audit, were all changed correctly.
 
