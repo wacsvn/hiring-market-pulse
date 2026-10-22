@@ -53,6 +53,8 @@ line-length = 100
 target-version = "py312"
 # First-party code lives here; without this, a local data/ folder changes import sorting.
 src = ["src", "app", "."]
+# The analysis notebook is a rendered document (its SQL lines are long by design).
+extend-exclude = ["analysis/*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]

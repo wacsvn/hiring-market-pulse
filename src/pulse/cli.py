@@ -37,6 +37,9 @@ def ingest(
         f"threads={s.threads} months_fetched={s.months_fetched} posts={s.posts} "
         f"jolts_rows={s.jolts_rows} quarantined={s.quarantined}"
     )
+    if s.jolts_error:
+        # Shows as a yellow annotation on the GitHub Actions run; harmless elsewhere.
+        typer.echo(f"::warning title=BLS JOLTS skipped::{s.jolts_error[:300]}")
 
 
 @app.command()
