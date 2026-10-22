@@ -19,6 +19,12 @@ dependencies = [
 [project.optional-dependencies]
 warehouse = ["dbt-core>=1.8", "dbt-databricks>=1.8", "databricks-sql-connector>=3.4"]
 llm = ["ollama>=0.3", "anthropic>=0.40"]
+analysis = [
+    "ipykernel>=7.4.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.2",
+    "nbconvert>=7.17.2",
+]
 
 [project.scripts]
 pulse = "pulse.cli:app"
