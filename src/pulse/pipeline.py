@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
+import httpx
 from pydantic import ValidationError
 
 from pulse import load
@@ -22,6 +23,7 @@ class IngestSummary:
     posts: int
     jolts_rows: int
     quarantined: int
+    jolts_error: str | None = None  # set when BLS was unavailable and JOLTS was skipped
 
 
 def ingest(
@@ -59,7 +61,14 @@ def ingest(
 
     years = [t.thread_month.year for t in threads.accepted] or [since.year]
     end_year = max(years)
-    jolts = bls.fetch(since.year, end_year)
+    # JOLTS updates monthly, so a BLS outage shouldn't block the daily refresh. On failure no
+    # JOLTS file is written, the warehouse load skips the dataset, and the last loaded JOLTS
+    # data stays in place. dbt's continuity tests still run on it.
+    try:
+        jolts = bls.fetch(since.year, end_year)
+    except (httpx.HTTPError, RuntimeError) as e:
+        log(f"WARNING: BLS JOLTS unavailable, keeping the last loaded JOLTS data ({e})")
+        return IngestSummary(len(threads.accepted), fetched, posts, 0, quarantined, str(e))
     load.write(load.to_frame(jolts.accepted), load.data_dir() / "raw" / "bls_jolts.parquet")
     load.append_quarantine(jolts.rejected)
     quarantined += len(jolts.rejected)

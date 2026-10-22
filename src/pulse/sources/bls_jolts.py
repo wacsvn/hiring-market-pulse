@@ -13,6 +13,7 @@ from datetime import date
 import httpx
 from pydantic import ValidationError
 
+from pulse import http as retrying
 from pulse.batch import Batch, reject
 from pulse.contracts import JoltsMeasure, JoltsObservation
 
@@ -25,7 +26,10 @@ SERIES: dict[str, JoltsMeasure] = {
 
 
 class BLSClient:
-    def __init__(self, http: httpx.Client | None = None, api_key: str | None = None) -> None:
+    def __init__(
+        self, http: httpx.Client | None = None, api_key: str | None = None, retry_delay: float = 2.0
+    ) -> None:
+        self.retry_delay = retry_delay
         self.api_key = api_key if api_key is not None else os.environ.get("BLS_API_KEY")
         version = "v2" if self.api_key else "v1"
         self.http = http or httpx.Client(
@@ -40,8 +44,9 @@ class BLSClient:
         }
         if self.api_key:
             payload["registrationkey"] = self.api_key
-        resp = self.http.post("/timeseries/data/", json=payload)
-        resp.raise_for_status()
+        resp = retrying.request(
+            self.http, "POST", "/timeseries/data/", json=payload, base_delay=self.retry_delay
+        )
         body = resp.json()
         if body.get("status") != "REQUEST_SUCCEEDED":
             raise RuntimeError(f"BLS request failed: {body.get('message')}")

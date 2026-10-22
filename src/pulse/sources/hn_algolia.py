@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 import httpx
 from pydantic import ValidationError
 
+from pulse import http as retrying
 from pulse.batch import Batch, reject
 from pulse.contracts import HiringThread, RawPost
 
@@ -47,8 +48,9 @@ def parse_thread_month(title: str) -> date | None:
 
 
 class HNClient:
-    def __init__(self, http: httpx.Client | None = None) -> None:
+    def __init__(self, http: httpx.Client | None = None, retry_delay: float = 2.0) -> None:
         self.http = http or httpx.Client(base_url=BASE_URL, timeout=30)
+        self.retry_delay = retry_delay
 
     def find_threads(self, since: date) -> Batch[HiringThread]:
         """All 'Who is hiring?' threads covering months >= `since`."""
@@ -56,8 +58,11 @@ class HNClient:
         since_ts = int(datetime(since.year, since.month, 1, tzinfo=UTC).timestamp()) - 7 * 86400
         page = 0
         while True:
-            resp = self.http.get(
+            resp = retrying.request(
+                self.http,
+                "GET",
                 "/search_by_date",
+                base_delay=self.retry_delay,
                 params={
                     "tags": "story,author_whoishiring",
                     "numericFilters": f"created_at_i>{since_ts}",
@@ -65,7 +70,6 @@ class HNClient:
                     "page": page,
                 },
             )
-            resp.raise_for_status()
             body = resp.json()
             for hit in body["hits"]:
                 title = hit.get("title") or ""
@@ -99,8 +103,9 @@ class HNClient:
 
     def fetch_posts(self, thread: HiringThread) -> Batch[RawPost]:
         """Top-level comments of a thread. Each top-level comment is one job post."""
-        resp = self.http.get(f"/items/{thread.thread_id}")
-        resp.raise_for_status()
+        resp = retrying.request(
+            self.http, "GET", f"/items/{thread.thread_id}", base_delay=self.retry_delay
+        )
         out: Batch[RawPost] = Batch()
         for child in resp.json().get("children", []):
             if child.get("type") != "comment":
