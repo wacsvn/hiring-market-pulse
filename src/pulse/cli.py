@@ -4,11 +4,8 @@ from datetime import UTC, date, datetime
 from typing import Annotated
 
 import typer
-from pydantic import ValidationError
 
-from pulse import load
-from pulse.contracts import Extraction, Rejected
-from pulse.extract import rules
+from pulse import pipeline
 from pulse.sources.bls_jolts import BLSClient
 from pulse.sources.hn_algolia import HNClient
 
@@ -27,33 +24,16 @@ def ingest(
     refresh_open: Annotated[int, typer.Option(help="Re-fetch the newest N months.")] = 2,
 ) -> None:
     """Fetch HN hiring threads and BLS JOLTS into data/raw (incremental)."""
-    since = _months_ago(months - 1)
-    hn = HNClient()
-    threads = hn.find_threads(since)
-    load.write(load.to_frame(threads.accepted), load.data_dir() / "raw" / "hn_threads.parquet")
-    load.append_quarantine(threads.rejected)
-
-    have = load.existing_post_months()
-    open_cutoff = _months_ago(refresh_open - 1)
-    fetched = 0
-    for t in threads.accepted:
-        if t.thread_month in have and t.thread_month < open_cutoff:
-            continue
-        posts = hn.fetch_posts(t)
-        load.write(load.to_frame(posts.accepted), load.posts_path(t.thread_month))
-        load.append_quarantine(posts.rejected)
-        fetched += 1
-        typer.echo(
-            f"{t.thread_month:%Y-%m}: {len(posts.accepted)} posts, "
-            f"{len(posts.rejected)} quarantined"
-        )
-
-    jolts = BLSClient().fetch(since.year, datetime.now(UTC).year)
-    load.write(load.to_frame(jolts.accepted), load.data_dir() / "raw" / "bls_jolts.parquet")
-    load.append_quarantine(jolts.rejected)
+    s = pipeline.ingest(
+        HNClient(),
+        BLSClient(),
+        since=_months_ago(months - 1),
+        refetch_from=_months_ago(refresh_open - 1),
+        log=typer.echo,
+    )
     typer.echo(
-        f"threads={len(threads.accepted)} fetched={fetched} "
-        f"jolts_rows={len(jolts.accepted)} jolts_quarantined={len(jolts.rejected)}"
+        f"threads={s.threads} months_fetched={s.months_fetched} posts={s.posts} "
+        f"jolts_rows={s.jolts_rows} quarantined={s.quarantined}"
     )
 
 
@@ -64,25 +44,31 @@ def extract(
     """Extract structured fields from every raw post into data/extracted."""
     if provider != "rules":
         raise typer.BadParameter("LLM providers arrive in Phase 2; use --provider rules")
-    posts = load.read_posts()
-    if posts.empty:
-        typer.echo("No raw posts. Run `pulse ingest` first.", err=True)
-        raise typer.Exit(1)
-    out: list[Extraction] = []
-    bad: list[Rejected] = []
-    for post_id, text_html in zip(posts["post_id"].astype(int), posts["text_html"], strict=True):
-        try:
-            out.append(rules.extract(post_id, str(text_html)))
-        except ValidationError as e:
-            bad.append(
-                Rejected(
-                    dataset="extractions", record_key=str(post_id), reason=str(e)[:500], payload=""
-                )
-            )
-    path = load.data_dir() / "extracted" / f"{load.extractor_slug('rules')}.parquet"
-    load.write(load.to_frame(out), path)
-    load.append_quarantine(bad)
-    typer.echo(f"extracted={len(out)} quarantined={len(bad)} -> {path}")
+    try:
+        n, bad = pipeline.extract_rules()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"extracted={n} quarantined={bad}")
+
+
+@app.command("load-warehouse")
+def load_warehouse(
+    raw_schema: Annotated[str, typer.Option(help="Databricks raw schema.")] = "pulse_raw",
+) -> None:
+    """Upload raw parquet to Databricks and (re)create the raw tables."""
+    from pulse import warehouse
+
+    warehouse.load_raw(raw_schema, log=typer.echo)
+
+
+@app.command("drop-schemas")
+def drop_schemas(schemas: list[str]) -> None:
+    """Drop Databricks schemas (used to clean up per-PR CI schemas)."""
+    from pulse import warehouse
+
+    warehouse.drop_schemas(*schemas)
+    typer.echo(f"dropped: {', '.join(schemas)}")
 
 
 if __name__ == "__main__":

@@ -13,3 +13,13 @@ models:
       +materialized: view
     marts:
       +materialized: table
+
+vars:
+  # Upper plausibility bound for posts per complete month. The lower bound comes from
+  # PULSE_MIN_POSTS_PER_MONTH (default 100) because CI's fixture data has only 40 per month.
+  max_posts_per_month: 2000
+  # Month-over-month % change that counts as a big move when comparing HN vs JOLTS.
+  divergence_threshold_pct: 25
+
+flags:
+  use_materialization_v2: true

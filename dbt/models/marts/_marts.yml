@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: fct_postings
+    description: One row per HN job post with structured fields. The base for every mart.
+    columns:
+      - name: post_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: { to: "ref('stg_hn_posts')", field: post_id }
+      - name: thread_month
+        data_tests: [not_null]
+      - name: salary_usd_annual_mid
+        description: Midpoint of a USD annual salary range; null for other currencies/periods.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments: { min_value: 15000, max_value: 1500000 }
+
+  - name: mart_monthly_summary
+    description: Headline KPIs per month. The incomplete (current) month is flagged.
+    columns:
+      - name: thread_month
+        data_tests: [unique, not_null]
+      - name: share_remote
+        data_tests: &share_0_1
+          - dbt_utils.accepted_range:
+              arguments: { min_value: 0, max_value: 1 }
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: work_mode_shares_at_most_one
+          arguments: { expression: "share_remote + share_hybrid + share_onsite <= 1.000001" }
+
+  - name: mart_role_mix
+    description: Postings per role family per month. A post can list several families.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: { combination_of_columns: [thread_month, role_family] }
+    columns:
+      - name: share_of_postings
+        data_tests: *share_0_1
+
+  - name: mart_tech_trends
+    description: How often each technology is mentioned per month.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: { combination_of_columns: [thread_month, tech] }
+    columns:
+      - name: share_of_postings
+        data_tests: *share_0_1
+
+  - name: mart_salary_bands
+    description: Trailing-12-month USD salary quartiles by role family and seniority.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: { combination_of_columns: [primary_role_family, seniority] }
+      - dbt_utils.expression_is_true:
+          name: salary_quartiles_ordered
+          arguments: { expression: "p25_usd <= median_usd and median_usd <= p75_usd" }
+
+  - name: mart_hn_vs_jolts
+    description: HN volume vs BLS JOLTS openings on overlapping complete months, indexed to 100.
+    columns:
+      - name: month
+        data_tests: [unique, not_null]
