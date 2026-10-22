@@ -22,8 +22,7 @@ test.describe('overview', () => {
 
   test('KPIs show the latest complete month vs the start of the range', async ({ page }) => {
     await openDashboard(page);
-    await expect(byKey(page, 'overview-heading')).toContainText('September 2026');
-    await expect(byKey(page, 'overview-heading')).toContainText('measured from Sep 2025');
+    await expect(byKey(page, 'overview-heading')).toContainText('Sep 2025 → Sep 2026');
     const kpi = (key: string) => byKey(page, `kpi-${key}`);
     await expect(kpi('posts').getByTestId('stMetricValue')).toHaveText('10');
     await expect(kpi('remote').getByTestId('stMetricValue')).toHaveText('60%');
@@ -32,7 +31,7 @@ test.describe('overview', () => {
     await expect(kpi('salary-share').getByTestId('stMetricDelta')).toContainText('+10 pts');
     await expect(kpi('median-salary').getByTestId('stMetricValue')).toHaveText('$180,000');
     await expect(kpi('median-salary').getByTestId('stMetricDelta')).toContainText('+10,000 USD');
-    await expect(kpi('posts').getByTestId('stMetricDelta')).toContainText('since Sep 2025');
+    await expect(kpi('salary-share')).toContainText('in Sep 2026 · was 10% in Sep 2025');
   });
 
   // Found in review: the KPIs ignored the date filter.
@@ -44,8 +43,12 @@ test.describe('overview', () => {
     await start.press('ArrowRight'); // Sep 2025 -> Nov 2025
     await waitForIdle(page);
     const kpi = (key: string) => byKey(page, `kpi-${key}`);
-    await expect(kpi('posts').getByTestId('stMetricDelta')).toContainText('-4 since Nov 2025');
+    await expect(kpi('posts').getByTestId('stMetricDelta')).toHaveText(/-4$/);
     await expect(kpi('remote').getByTestId('stMetricDelta')).toContainText('-19 pts');
+    // Found in review: moving the start thumb changed only the small pill. The start month's
+    // value is now shown too, so the change is visible.
+    await expect(kpi('remote')).toContainText('was 79% in Nov 2025');
+    await expect(byKey(page, 'overview-heading')).toContainText('Nov 2025 → Sep 2026');
   });
 
   test('KPIs follow the end of the date range', async ({ page }) => {
@@ -55,7 +58,7 @@ test.describe('overview', () => {
     await end.press('ArrowLeft');
     await end.press('ArrowLeft'); // Oct 2026 -> Aug 2026
     await waitForIdle(page);
-    await expect(byKey(page, 'overview-heading')).toContainText('August 2026');
+    await expect(byKey(page, 'overview-heading')).toContainText('Sep 2025 → Aug 2026');
     await expect(byKey(page, 'kpi-posts').getByTestId('stMetricValue')).toHaveText('11');
     // August had no USD salaries in the fixture: the median shows a dash, not a stale number.
     await expect(byKey(page, 'kpi-median-salary').getByTestId('stMetricValue')).toHaveText('–');

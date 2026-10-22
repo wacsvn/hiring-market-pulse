@@ -10,7 +10,10 @@ macro-paths: ["macros"]
 models:
   pulse:
     staging:
-      +materialized: view
+      # Tables, not views: this adapter drops and recreates views on every build, and dropped
+      # objects count against the workspace's table quota for 7 days. Tables are replaced in
+      # place. The staging data is small, so storage is negligible.
+      +materialized: table
     marts:
       +materialized: table
 

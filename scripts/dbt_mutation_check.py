@@ -5,7 +5,9 @@ models upstream of the target test are rebuilt, and the run must report that tes
 as FAILED. A test that still passes on corrupted data is a test that can't fail.
 
 Usage: uv run python scripts/dbt_mutation_check.py --source-schema pulse_dev_raw
-Needs DATABRICKS_* env vars. Leaves no schemas behind.
+Needs DATABRICKS_* env vars. The mutant schemas (<source>_mut, <source>_mut_dbt) are kept and
+reused: every table in them is rewritten in place on each run. Dropping them after each run
+would count every table against the workspace's table quota for 7 days.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from pulse.warehouse import CATALOG, DATASETS, connect, drop_schemas
+from pulse.warehouse import CATALOG, DATASETS, connect
 
 DBT_DIR = Path(__file__).resolve().parents[1] / "dbt"
 
@@ -178,20 +180,17 @@ def main() -> int:
         copy_tables(cur, src, mut, tables)
 
     survivors = []
-    try:
-        for m in MUTATIONS:
-            with connect() as conn, conn.cursor() as cur:
-                for stmt in m.sql:
-                    cur.execute(stmt.format(s=f"{CATALOG}.{mut}"))
-            status = run_dbt(m.test, mut, mut_dbt)
-            caught = status in {"fail", "error"}
-            print(f"{'CAUGHT ' if caught else 'MISSED '} {m.name:<34} -> {m.test} [{status}]")
-            if not caught:
-                survivors.append(m.name)
-            with connect() as conn, conn.cursor() as cur:  # restore for the next mutation
-                copy_tables(cur, src, mut, m.tables)
-    finally:
-        drop_schemas(mut, mut_dbt)
+    for m in MUTATIONS:
+        with connect() as conn, conn.cursor() as cur:
+            for stmt in m.sql:
+                cur.execute(stmt.format(s=f"{CATALOG}.{mut}"))
+        status = run_dbt(m.test, mut, mut_dbt)
+        caught = status in {"fail", "error"}
+        print(f"{'CAUGHT ' if caught else 'MISSED '} {m.name:<34} -> {m.test} [{status}]")
+        if not caught:
+            survivors.append(m.name)
+        with connect() as conn, conn.cursor() as cur:  # restore for the next mutation
+            copy_tables(cur, src, mut, m.tables)
 
     print(f"\n{len(MUTATIONS) - len(survivors)}/{len(MUTATIONS)} mutations caught")
     return 1 if survivors else 0

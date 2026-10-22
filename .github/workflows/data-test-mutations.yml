@@ -35,6 +35,3 @@ jobs:
       - run: uv run python scripts/build_fixture_data.py
       - run: uv run pulse load-warehouse --raw-schema "$RAW"
       - run: uv run python scripts/dbt_mutation_check.py --source-schema "$RAW"
-      - name: Drop schemas
-        if: always()
-        run: uv run pulse drop-schemas "$RAW"

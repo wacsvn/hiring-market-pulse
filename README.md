@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml)
 [![Refresh data](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml)
+[![Docs](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/docs.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/docs.yml)
+[![Live smoke test](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/live-smoke.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/live-smoke.yml)
 
 **[Live dashboard](https://hiring-market-pulse.streamlit.app/)** ·
 **[Data model docs](https://wacsvn.github.io/hiring-market-pulse/)** ·
@@ -93,13 +95,13 @@ flowchart LR
 | Layer | What runs | Where |
 |---|---|---|
 | Inputs | Data contracts on every record; quarantine with reasons; quarantine-rate limit | [`contracts.py`](src/pulse/contracts.py), [dbt test](dbt/tests/assert_quarantine_rate_below_5pct.sql) |
-| Python | 79 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
+| Python | 85 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
 | Field extraction | Accuracy audit on 50 sampled posts, scored per field; CI fails if any field drops more than 2 points below the committed baseline | [`evals/`](evals) |
 | Data | 52 dbt tests: uniqueness, relationships, accepted values, salary rules, no missing months, freshness, schema drift, cross-source divergence (warn) | [`dbt/`](dbt) |
 | Data tests themselves | Mutation check: corrupts a copy of the data 11 ways; each matching test must fail (11/11) | [`dbt_mutation_check.py`](scripts/dbt_mutation_check.py) |
-| Dashboard | 13 Playwright tests against frozen fixture data: KPIs and their sample-size warnings, filters, chart contents, color stability, empty and unreachable-data states | [`e2e/`](e2e) |
+| Dashboard | 16 Playwright tests against frozen fixture data: KPIs following the date range, sample-size warnings, chart contents, color stability, empty and unreachable-data states | [`e2e/`](e2e) |
 | Deployed app | Daily smoke test of the live site after each refresh | [`live-smoke.yml`](.github/workflows/live-smoke.yml) |
-| CI | Lint, types, tests, dbt in per-PR Databricks schemas (always dropped), e2e; mutation check when data tests change | [`.github/workflows/`](.github/workflows) |
+| CI/CD | Every PR must pass all checks before it can merge; see below | [`.github/workflows/`](.github/workflows) |
 
 ### Accuracy audit of the extracted fields
 
@@ -161,6 +163,45 @@ Bugs these checks caught during development:
 - Plural job titles ("Software Engineers") missed by the role extractor.
 - "go" the verb counted as the Go language.
 - Test fixtures that breached the pipeline's own quarantine limit.
+
+## CI/CD
+
+Every change goes through a pull request, and `main` is protected: a PR can't merge until
+the required checks pass. After merge, the app, data, and docs deploy themselves.
+
+```mermaid
+flowchart LR
+  subgraph PR["On every pull request (required to merge)"]
+    direction TB
+    L["Pre-commit hooks<br/>lint, format, types"] --> U["85 unit tests<br/>+ extractor accuracy gate"]
+    S[Scrub check]
+    D["dbt build + 52 data tests<br/>in the PR's own Databricks schema"]
+    E["16 Playwright tests<br/>against the dashboard"]
+    M["Mutation check<br/>(when data tests change)"]
+  end
+  PR --> MERGE([merge to main])
+  MERGE --> APP[Streamlit app redeploys]
+  MERGE --> DOCS[dbt docs site republishes]
+  subgraph DAILY["Daily"]
+    direction TB
+    R["Refresh: ingest → load → dbt build"] -->|all tests pass| PUB[Publish data to the app]
+    R -->|a test fails| ISS[Open an issue, keep last good data]
+    PUB --> DOCS2[Republish docs]
+    SMOKE[Smoke test the live site]
+  end
+```
+
+| Workflow | Trigger | What it gates or delivers |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | every PR and push to `main` | Required checks: pre-commit hooks (lint, format, types), unit tests and the accuracy gate, scrub check, dbt build with all data tests in a per-PR Databricks schema, Playwright e2e |
+| [`data-test-mutations.yml`](.github/workflows/data-test-mutations.yml) | PRs touching dbt, weekly | Proves the data tests catch 11 kinds of injected faults |
+| [`refresh.yml`](.github/workflows/refresh.yml) | daily | Rebuilds everything from the APIs; publishes only if every hard test passes, otherwise opens an issue |
+| [`docs.yml`](.github/workflows/docs.yml) | dbt changes, after each refresh | Publishes the [data model docs](https://wacsvn.github.io/hiring-market-pulse/) |
+| [`live-smoke.yml`](.github/workflows/live-smoke.yml) | daily | Loads the deployed dashboard and checks every tab renders |
+| [`ci-cleanup.yml`](.github/workflows/ci-cleanup.yml) | PR closed | Drops the PR's Databricks schemas |
+
+The same lint and type checks run locally before each commit (`uv run pre-commit install`),
+so "passes on my machine" and "passes in CI" mean the same thing.
 
 ## Run it locally
 
