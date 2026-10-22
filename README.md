@@ -8,7 +8,8 @@
 **[Live dashboard](https://hiring-market-pulse.streamlit.app/)** ·
 **[Data model docs](https://wacsvn.github.io/hiring-market-pulse/)** ·
 [Analysis memo (notebook)](analysis/hiring_market_findings.ipynb) ·
-[Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md)
+[Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md) ·
+[Incident report](docs/incidents/2026-10-22-refresh-failures.md)
 
 > **In short:** a daily pipeline loads 11,500+ job posts and official labor data into
 > Databricks, models them with dbt, and publishes a dashboard only after 52 data tests
@@ -96,7 +97,7 @@ flowchart LR
 | Layer | What runs | Where |
 |---|---|---|
 | Inputs | Data contracts on every record; quarantine with reasons; quarantine-rate limit | [`contracts.py`](src/pulse/contracts.py), [dbt test](dbt/tests/assert_quarantine_rate_below_5pct.sql) |
-| Python | 85 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
+| Python | 90 pytest tests on recorded API responses, incl. property-based salary parsing and API retry/outage handling | [`tests/`](tests) |
 | Field extraction | Accuracy audit on 50 sampled posts, scored per field; CI fails if any field drops more than 2 points below the committed baseline | [`evals/`](evals) |
 | Data | 52 dbt tests: uniqueness, relationships, accepted values, salary rules, no missing months, freshness, schema drift, cross-source divergence (warn) | [`dbt/`](dbt) |
 | Data tests themselves | Mutation check: corrupts a copy of the data 11 ways; each matching test must fail (11/11) | [`dbt_mutation_check.py`](scripts/dbt_mutation_check.py) |
@@ -174,7 +175,7 @@ the required checks pass. After merge, the app, data, and docs deploy themselves
 flowchart LR
   subgraph PR["On every pull request (required to merge)"]
     direction TB
-    L["Pre-commit hooks<br/>lint, format, types"] --> U["85 unit tests<br/>+ extractor accuracy gate"]
+    L["Pre-commit hooks<br/>lint, format, types"] --> U["90 unit tests<br/>+ extractor accuracy gate"]
     S[Scrub check]
     D["dbt build + 52 data tests<br/>in a dedicated CI schema"]
     E["16 Playwright tests<br/>against the dashboard"]
@@ -202,6 +203,12 @@ flowchart LR
 
 The same lint and type checks run locally before each commit (`uv run pre-commit install`),
 so "passes on my machine" and "passes in CI" mean the same thing.
+
+**In production:** on 2026-10-22 the daily refresh failed twice, first on the Databricks table
+quota and then on a BLS API outage. Both times the publish gate held, the dashboard kept the
+last good data, and an issue opened automatically. The fixes (less table churn, retries, and
+skipping a stale monthly source instead of failing) are in the
+[incident report](docs/incidents/2026-10-22-refresh-failures.md).
 
 ## Run it locally
 
