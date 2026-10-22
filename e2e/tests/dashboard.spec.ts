@@ -122,4 +122,10 @@ test.describe('empty state', () => {
     await expect(byKey(page, 'empty-state')).toContainText('No data has been published yet');
     await expect(page.locator('[data-testid="stException"]')).toHaveCount(0);
   });
+
+  test('says so when published data cannot be fetched', async ({ page }) => {
+    await page.goto('http://localhost:8603/');
+    await expect(byKey(page, 'empty-state')).toContainText("Couldn't load the published data");
+    await expect(page.locator('[data-testid="stException"]')).toHaveCount(0);
+  });
 });

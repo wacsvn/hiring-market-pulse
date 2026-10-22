@@ -63,10 +63,17 @@ st.caption(
 
 if marts.is_empty:
     with st.container(key="empty-state"):
-        st.info(
-            "No data has been published yet. Run the refresh pipeline "
-            "(`pulse ingest → extract → load-warehouse → dbt build → export-marts`) and reload."
-        )
+        if marts.error:
+            st.warning(
+                f"Couldn't load the published data from `{marts.source}`. "
+                f"Try again in a few minutes.\n\n`{marts.error}`"
+            )
+        else:
+            st.info(
+                "No data has been published yet. Run the refresh pipeline "
+                "(`pulse ingest → extract → load-warehouse → dbt build → export-marts`) "
+                "and reload."
+            )
     st.stop()
 
 monthly = marts["mart_monthly_summary"].sort_values("thread_month")
