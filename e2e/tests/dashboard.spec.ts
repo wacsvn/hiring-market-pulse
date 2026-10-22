@@ -122,6 +122,8 @@ test.describe('data quality', () => {
     await openTab(page, 'Data quality');
     await expect(page.locator('.st-key-table-quarantine')).toBeVisible();
     await expect(page.getByText('Not passing: warn_hn_jolts_divergence')).toBeVisible();
+    await expect(byKey(page, 'extractor-accuracy')).toContainText('hand-checked job posts');
+    await expect(byKey(page, 'extractor-accuracy')).toContainText('Work mode');
   });
 });
 

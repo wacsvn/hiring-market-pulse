@@ -1,0 +1,212 @@
+{
+  "sampled_posts": 50,
+  "job_posts": 46,
+  "non_job_post_rate": 0.08,
+  "work_mode_accuracy": 0.978,
+  "seniority_accuracy": 0.913,
+  "role_families_exact": 0.696,
+  "role_families_precision": 0.865,
+  "role_families_recall": 0.714,
+  "salary_detection_accuracy": 0.978,
+  "salary_recall": 0.929,
+  "salary_precision": 1.0,
+  "salary_values_correct": 0.929,
+  "work_mode_confusion": {
+    "remote->hybrid": 1
+  },
+  "errors": [
+    {
+      "post_id": 49170963,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering"
+      ],
+      "got": [
+        "engineering",
+        "operations"
+      ]
+    },
+    {
+      "post_id": 49523956,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering",
+        "sales_marketing"
+      ],
+      "got": [
+        "data_ml"
+      ]
+    },
+    {
+      "post_id": 49540382,
+      "field": "role_families",
+      "expected": [
+        "other"
+      ],
+      "got": [
+        "engineering"
+      ]
+    },
+    {
+      "post_id": 46109033,
+      "field": "seniority",
+      "expected": "staff_plus",
+      "got": "senior"
+    },
+    {
+      "post_id": 46109033,
+      "field": "role_families",
+      "expected": [
+        "engineering",
+        "product"
+      ],
+      "got": [
+        "engineering"
+      ]
+    },
+    {
+      "post_id": 47281299,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering",
+        "product"
+      ],
+      "got": [
+        "engineering"
+      ]
+    },
+    {
+      "post_id": 45832585,
+      "field": "salary",
+      "expected": "a salary",
+      "got": null
+    },
+    {
+      "post_id": 46129396,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering"
+      ],
+      "got": [
+        "sales_marketing"
+      ]
+    },
+    {
+      "post_id": 49927257,
+      "field": "work_mode",
+      "expected": "remote",
+      "got": "hybrid"
+    },
+    {
+      "post_id": 49927257,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering"
+      ],
+      "got": [
+        "engineering"
+      ]
+    },
+    {
+      "post_id": 45445490,
+      "field": "seniority",
+      "expected": "unknown",
+      "got": "lead_manager"
+    },
+    {
+      "post_id": 47230320,
+      "field": "role_families",
+      "expected": [
+        "engineering"
+      ],
+      "got": [
+        "data_ml"
+      ]
+    },
+    {
+      "post_id": 49527118,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering",
+        "sales_marketing"
+      ],
+      "got": [
+        "data_ml",
+        "sales_marketing"
+      ]
+    },
+    {
+      "post_id": 49933183,
+      "field": "role_families",
+      "expected": [
+        "sales_marketing"
+      ],
+      "got": [
+        "operations",
+        "sales_marketing"
+      ]
+    },
+    {
+      "post_id": 48360400,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "engineering"
+      ],
+      "got": [
+        "data_ml"
+      ]
+    },
+    {
+      "post_id": 46110464,
+      "field": "role_families",
+      "expected": [
+        "data_ml",
+        "design",
+        "engineering"
+      ],
+      "got": [
+        "other"
+      ]
+    },
+    {
+      "post_id": 46119024,
+      "field": "role_families",
+      "expected": [
+        "engineering",
+        "operations"
+      ],
+      "got": [
+        "engineering"
+      ]
+    },
+    {
+      "post_id": 49530430,
+      "field": "seniority",
+      "expected": "staff_plus",
+      "got": "senior"
+    },
+    {
+      "post_id": 48365048,
+      "field": "seniority",
+      "expected": "unknown",
+      "got": "senior"
+    },
+    {
+      "post_id": 45448171,
+      "field": "role_families",
+      "expected": [
+        "sales_marketing"
+      ],
+      "got": [
+        "engineering"
+      ]
+    }
+  ]
+}

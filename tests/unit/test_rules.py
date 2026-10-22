@@ -73,6 +73,11 @@ def test_salary_range_property(lo: int, width: int) -> None:
         ("Acme | Engineer | Austin | No remote", "", "onsite"),
         ("Acme | Engineer | Austin", "This role is fully remote.", "remote"),
         ("Acme | Engineer | Austin", "We love our office.", "unknown"),
+        # Found by the accuracy audit: remote must win over hybrid when either is allowed.
+        ("Acme | Engineer | Hybrid or Remote (US)", "", "remote"),
+        ("Acme | Multiple positions - WORK FROM HOME", "", "remote"),
+        # ...but a hybrid schedule that mentions remote days is still hybrid.
+        ("Acme | Engineer | Hybrid (2 days remote, 3 days in NYC)", "", "hybrid"),
     ],
 )
 def test_work_mode(header: str, body: str, expected: str) -> None:
@@ -109,10 +114,30 @@ def test_role_families_falls_back_to_body() -> None:
         ("Acme | Engineering Manager", "lead_manager"),
         ("Acme | Summer Interns", "intern"),
         ("Acme | Engineer", "unknown"),
+        # The level named first wins (found by the accuracy audit).
+        ("Acme | Senior / Staff Backend Engineer", "senior"),
+        ("Acme | SDE2/Sr. Software Engineer", "mid"),
+        ("Acme | Software Engineer II", "mid"),
+        ("Acme | Member of Technical Staff", "unknown"),
     ],
 )
 def test_seniority(header: str, expected: str) -> None:
     assert rules.seniority(header) == expected
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("Open roles: Senior Software Engineer, Back-end", "senior"),
+        ("We're looking for a Lead Engineer to shape the platform", "lead_manager"),
+        ("ROLE: Performance Marketing Manager", "lead_manager"),
+        # Level words in ordinary prose are not job titles.
+        ("We lead the industry and our senior leadership is great.", "unknown"),
+        ("Talk to the hiring manager about it.", "unknown"),
+    ],
+)
+def test_seniority_body_fallback_only_counts_job_titles(body: str, expected: str) -> None:
+    assert rules.seniority("Acme | Remote", body) == expected
 
 
 def test_tech_avoids_common_false_positives() -> None:

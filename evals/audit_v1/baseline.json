@@ -1,0 +1,7 @@
+{
+  "work_mode_accuracy": 0.978,
+  "seniority_accuracy": 0.913,
+  "role_families_exact": 0.696,
+  "salary_detection_accuracy": 0.978,
+  "salary_values_correct": 0.929
+}

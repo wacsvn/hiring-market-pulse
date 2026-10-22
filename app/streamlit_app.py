@@ -429,8 +429,33 @@ with tab_quality:
                 hide_index=True,
                 width="stretch",
             )
+    accuracy = marts.metadata.get("extractor_accuracy")
+    if accuracy:
+        with st.container(key="extractor-accuracy"):
+            st.markdown("**How accurate is the field extraction?**")
+            st.caption(
+                f"Fields like work mode and salary are pulled from free text by a rules-based "
+                f"extractor. It was scored against {accuracy['job_posts_checked']} hand-checked "
+                f"job posts (a random sample of {accuracy['sampled_posts']}). "
+                f"{accuracy['non_job_post_rate']:.0%} of the sampled posts weren't job ads at "
+                "all (replies, links), and they are still counted as posts."
+            )
+            st.dataframe(
+                pd.DataFrame(
+                    {
+                        "Field": list(accuracy["fields"]),
+                        "Accuracy": list(accuracy["fields"].values()),
+                    }
+                ),
+                column_config={
+                    "Accuracy": st.column_config.ProgressColumn(
+                        format="percent", min_value=0, max_value=1
+                    )
+                },
+                hide_index=True,
+                width="stretch",
+            )
     st.markdown(
-        "**Method notes.** Fields are extracted from free text by a rules-based extractor, so "
-        "some posts are misread (seniority especially). Salaries are posted ranges, not "
-        "offers. HN skews toward startups and software roles."
+        "**Method notes.** Salaries are posted ranges, not offers, and only USD annual ranges "
+        "feed the medians. HN skews toward startups and software roles."
     )

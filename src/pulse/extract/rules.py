@@ -12,24 +12,30 @@ from dataclasses import dataclass
 from pulse.contracts import Extraction, RoleFamily, SalaryPeriod, Seniority, WorkMode
 from pulse.extract.text import header_line, html_to_text
 
-VERSION = "1"
+VERSION = "2"
 
 # --- work mode -----------------------------------------------------------------
 
-_REMOTE = re.compile(r"\bremote\b", re.IGNORECASE)
+# "2 days remote" / "remote Fridays" describe a hybrid schedule, not a remote option.
+_REMOTE = re.compile(
+    r"(?<!days )(?<!day )\bremote\b(?! (days?|fridays?|mondays?)\b)"
+    r"|\bwork(ing)? from home\b|\bWFH\b",
+    re.IGNORECASE,
+)
 _NOT_REMOTE = re.compile(r"\b(no|not)\s+remote\b|\bnon[- ]remote\b", re.IGNORECASE)
 _HYBRID = re.compile(r"\bhybrid\b", re.IGNORECASE)
 _ONSITE = re.compile(r"\b(on[- ]?site|in[- ]office|in[- ]person)\b", re.IGNORECASE)
 
 
 def work_mode(header: str, body: str) -> WorkMode:
-    """'remote' means remote work is allowed (even if onsite is also offered)."""
+    """'remote' means remote work is allowed for at least one role, even if hybrid or onsite
+    is also offered, so remote is checked before hybrid ("Hybrid or Remote (US)" -> remote).
+    """
     for text in (header, body):
-        remote = bool(_REMOTE.search(text)) and not _NOT_REMOTE.search(text)
+        if _REMOTE.search(text) and not _NOT_REMOTE.search(text):
+            return "remote"
         if _HYBRID.search(text):
             return "hybrid"
-        if remote:
-            return "remote"
         if _ONSITE.search(text) or _NOT_REMOTE.search(text):
             return "onsite"
     return "unknown"
@@ -171,21 +177,45 @@ def role_families(header: str, body: str = "") -> list[RoleFamily]:
 
 _SENIORITY: list[tuple[Seniority, re.Pattern[str]]] = [
     ("intern", re.compile(r"\bintern(ship)?s?\b", re.IGNORECASE)),
-    ("staff_plus", re.compile(r"\b(staff|principal|distinguished)\b", re.IGNORECASE)),
+    # "Member of Technical Staff" is a title convention, not a staff-level role.
+    ("staff_plus", re.compile(r"\b(?<!technical )(staff|principal|distinguished)\b", re.I)),
     (
         "lead_manager",
         re.compile(r"\b(lead|manager|head of|director|VP|vice president|CTO)\b", re.IGNORECASE),
     ),
     ("senior", re.compile(r"\b(senior|sr\.?)\b", re.IGNORECASE)),
+    ("mid", re.compile(r"\b(mid[- ]level|(engineer|developer|SWE) II|SDE ?2)\b", re.IGNORECASE)),
     ("junior", re.compile(r"\b(junior|jr\.?|entry[- ]level|new grad)\b", re.IGNORECASE)),
 ]
+# In body prose a level word only counts as part of a job title: followed shortly by a role
+# noun ("Senior Software Engineer") or itself a capitalised title word ("Commercial Manager").
+_ROLE_NOUN = re.compile(
+    r"^\W*(\w+\W+){0,3}?(engineers?|developers?|scientists?|designers?|managers?|analysts?|"
+    r"architects?|SWEs?|SREs?|devops|marketers?|recruiters?|executives?)\b",
+    re.IGNORECASE,
+)
+_TITLE_WORD = re.compile(r"Manager|Director|Head of|VP|CTO|Lead\b")
 
 
-def seniority(header: str) -> Seniority:
+def _first_level(text: str, title_only: bool = False) -> Seniority:
+    """The level named first in the text (so "Senior / Staff Engineer" -> senior)."""
+    hits: list[tuple[int, Seniority]] = []
     for level, pat in _SENIORITY:
-        if pat.search(header):
-            return level
-    return "unknown"
+        for m in pat.finditer(text):
+            if title_only and not (
+                _ROLE_NOUN.match(text[m.end() : m.end() + 60]) or _TITLE_WORD.match(m.group(0))
+            ):
+                continue
+            hits.append((m.start(), level))
+    return min(hits)[1] if hits else "unknown"
+
+
+def seniority(header: str, body: str = "") -> Seniority:
+    """Level from the header; falls back to job titles in the opening of the body."""
+    level = _first_level(header)
+    if level == "unknown" and body:
+        level = _first_level(body[:600], title_only=True)
+    return level
 
 
 # --- tech, locations, visa, company ----------------------------------------------
@@ -300,7 +330,7 @@ def extract(post_id: int, text_html: str) -> Extraction:
         company=company(head),
         work_mode=work_mode(head, body),
         role_families=role_families(head, body),
-        seniority=seniority(head),
+        seniority=seniority(head, body),
         locations=locations(head, body),
         salary_min=sal.low if sal else None,
         salary_max=sal.high if sal else None,
