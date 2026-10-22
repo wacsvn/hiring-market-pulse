@@ -14,9 +14,9 @@ test.describe('live dashboard', () => {
     await page.goto(`${LIVE_URL!.replace(/\/$/, '')}/~/+/`, { timeout: 120_000 });
     const wake = page.getByRole('button', { name: /get this app back up/i });
     if (await wake.isVisible().catch(() => false)) await wake.click(); // app slept
-    await expect(page.getByText(/Latest complete month/)).toBeVisible({ timeout: 180_000 });
+    await expect(page.locator('.st-key-kpi-posts')).toBeVisible({ timeout: 180_000 });
 
-    await expect(page.locator('.st-key-trust-banner')).toContainText('data-quality checks passed');
+    await expect(page.locator('.st-key-trust-banner')).toContainText('data checks passed');
     for (const key of ['posts', 'remote', 'salary-share', 'median-salary']) {
       await expect(page.locator(`.st-key-kpi-${key} [data-testid="stMetricValue"]`)).not.toBeEmpty();
     }

@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]  # validated: first 4 categorical slots
 DIVERGING_UP, DIVERGING_DOWN = "#2a78d6", "#e34948"
-SURFACE = "#fcfcfb"
+SURFACE = "#ffffff"  # charts sit on white cards
 INK, INK_2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS = "#e1e0d9", "#c3c2b7"
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'

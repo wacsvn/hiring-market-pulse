@@ -15,14 +15,15 @@ test.describe('overview', () => {
   test('trust banner reports the last data-quality run', async ({ page }) => {
     await openDashboard(page);
     await expect(byKey(page, 'trust-banner')).toContainText(
-      '51 of 52 data-quality checks passed',
+      '51 of 52 data checks passed',
     );
     await expect(byKey(page, 'trust-banner')).toContainText('1 flagged for review');
   });
 
-  test('KPIs show the latest complete month vs a year earlier', async ({ page }) => {
+  test('KPIs show the latest complete month vs the start of the range', async ({ page }) => {
     await openDashboard(page);
-    await expect(page.getByText('Latest complete month: September 2026')).toBeVisible();
+    await expect(byKey(page, 'overview-heading')).toContainText('September 2026');
+    await expect(byKey(page, 'overview-heading')).toContainText('measured from Sep 2025');
     const kpi = (key: string) => byKey(page, `kpi-${key}`);
     await expect(kpi('posts').getByTestId('stMetricValue')).toHaveText('10');
     await expect(kpi('remote').getByTestId('stMetricValue')).toHaveText('60%');
@@ -31,6 +32,33 @@ test.describe('overview', () => {
     await expect(kpi('salary-share').getByTestId('stMetricDelta')).toContainText('+10 pts');
     await expect(kpi('median-salary').getByTestId('stMetricValue')).toHaveText('$180,000');
     await expect(kpi('median-salary').getByTestId('stMetricDelta')).toContainText('+10,000 USD');
+    await expect(kpi('posts').getByTestId('stMetricDelta')).toContainText('since Sep 2025');
+  });
+
+  // Found in review: the KPIs ignored the date filter.
+  test('KPIs follow the start of the date range', async ({ page }) => {
+    await openDashboard(page);
+    const start = page.getByRole('slider', { name: 'Months shown — start' });
+    await start.focus();
+    await start.press('ArrowRight');
+    await start.press('ArrowRight'); // Sep 2025 -> Nov 2025
+    await waitForIdle(page);
+    const kpi = (key: string) => byKey(page, `kpi-${key}`);
+    await expect(kpi('posts').getByTestId('stMetricDelta')).toContainText('-4 since Nov 2025');
+    await expect(kpi('remote').getByTestId('stMetricDelta')).toContainText('-19 pts');
+  });
+
+  test('KPIs follow the end of the date range', async ({ page }) => {
+    await openDashboard(page);
+    const end = page.getByRole('slider', { name: 'Months shown — end' });
+    await end.focus();
+    await end.press('ArrowLeft');
+    await end.press('ArrowLeft'); // Oct 2026 -> Aug 2026
+    await waitForIdle(page);
+    await expect(byKey(page, 'overview-heading')).toContainText('August 2026');
+    await expect(byKey(page, 'kpi-posts').getByTestId('stMetricValue')).toHaveText('11');
+    // August had no USD salaries in the fixture: the median shows a dash, not a stale number.
+    await expect(byKey(page, 'kpi-median-salary').getByTestId('stMetricValue')).toHaveText('–');
   });
 
   test('salary KPI states its sample size and warns when it is too small', async ({ page }) => {
@@ -87,7 +115,20 @@ test.describe('skills & roles', () => {
     await openTab(page, 'Skills & roles');
     const [bars] = await traces(chart(page, 'chart-tech-movers'));
     expect(bars.points).toBeGreaterThan(3);
+    await expect(byKey(page, 'card-tech-movers')).toContainText('last 6 months of your range');
     await expect(page.locator('.st-key-table-roles')).toBeVisible();
+  });
+
+  // Found in review: the caption promised 6-month windows even for shorter ranges.
+  test('movers caption states the window actually used for short ranges', async ({ page }) => {
+    await openDashboard(page);
+    const start = page.getByRole('slider', { name: 'Months shown — start' });
+    await start.focus();
+    for (let i = 0; i < 10; i++) await start.press('ArrowRight'); // 4 months left
+    await waitForIdle(page);
+    await openTab(page, 'Skills & roles');
+    await expect(byKey(page, 'card-tech-movers')).toContainText('last 2 months of your range');
+    await expect(byKey(page, 'card-tech-movers')).not.toContainText('6 months');
   });
 });
 
@@ -112,7 +153,7 @@ test.describe('HN vs official data', () => {
     expect(names).toEqual(
       expect.arrayContaining(['HN posts', 'JOLTS openings', 'Months the two moved very differently']),
     );
-    await expect(byKey(page, 'lead-lag')).toContainText('Strongest month-over-month correlation');
+    await expect(byKey(page, 'lead-lag')).toContainText('The strongest correlation is');
   });
 });
 
@@ -122,7 +163,7 @@ test.describe('data quality', () => {
     await openTab(page, 'Data quality');
     await expect(page.locator('.st-key-table-quarantine')).toBeVisible();
     await expect(page.getByText('Not passing: warn_hn_jolts_divergence')).toBeVisible();
-    await expect(byKey(page, 'extractor-accuracy')).toContainText('hand-checked job posts');
+    await expect(byKey(page, 'extractor-accuracy')).toContainText('job posts labeled by hand');
     await expect(byKey(page, 'extractor-accuracy')).toContainText('Work mode');
   });
 });

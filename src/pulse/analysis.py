@@ -11,7 +11,7 @@ import pandas as pd
 class Kpi:
     label: str
     value: float | None
-    previous: float | None  # same month one year earlier, if available
+    previous: float | None  # same measure in the comparison month, if there is one
 
     @property
     def delta(self) -> float | None:
@@ -20,43 +20,74 @@ class Kpi:
         return self.value - self.previous
 
 
+@dataclass(frozen=True)
+class KpiSet:
+    month: pd.Timestamp  # latest complete month in the selected range
+    compared_with: pd.Timestamp | None  # first complete month in the range, if different
+    kpis: list[Kpi]
+
+
 def complete_months(monthly: pd.DataFrame) -> pd.DataFrame:
     return monthly[monthly["is_complete_month"]].sort_values("thread_month")
 
 
-def headline_kpis(monthly: pd.DataFrame) -> list[Kpi]:
-    """KPIs for the latest complete month, each compared with 12 months earlier."""
+def headline_kpis(
+    monthly: pd.DataFrame, start: pd.Timestamp | None = None, end: pd.Timestamp | None = None
+) -> KpiSet | None:
+    """KPIs for the latest complete month in [start, end], compared with the first month.
+
+    Following the reader's date range means the change shown is the change across the
+    months they chose. None if the range holds no complete month.
+    """
     done = complete_months(monthly)
+    if start is not None:
+        done = done[done["thread_month"] >= start]
+    if end is not None:
+        done = done[done["thread_month"] <= end]
     if done.empty:
-        return []
-    latest = done.iloc[-1]
-    year_ago_month = latest["thread_month"] - pd.DateOffset(years=1)
-    prior = done[done["thread_month"] == year_ago_month]
-    prev = prior.iloc[0] if not prior.empty else None
+        return None
+    latest, first = done.iloc[-1], done.iloc[0]
+    prev = first if len(done) > 1 else None
 
     def pick(col: str) -> tuple[float | None, float | None]:
         v = latest[col]
         p = prev[col] if prev is not None else None
         return (None if pd.isna(v) else float(v), None if p is None or pd.isna(p) else float(p))
 
-    return [
-        Kpi("Job posts", *pick("postings")),
-        Kpi("Remote-friendly", *pick("share_remote")),
-        Kpi("List a salary", *pick("share_with_salary")),
-        Kpi("Median posted salary (USD)", *pick("median_salary_usd")),
-    ]
+    return KpiSet(
+        month=latest["thread_month"],
+        compared_with=first["thread_month"] if prev is not None else None,
+        kpis=[
+            Kpi("Job posts", *pick("postings")),
+            Kpi("Remote-friendly", *pick("share_remote")),
+            Kpi("List a salary", *pick("share_with_salary")),
+            Kpi("Median posted salary (USD)", *pick("median_salary_usd")),
+        ],
+    )
+
+
+def movers_window(n_months: int, months: int = 6) -> int:
+    """Months averaged at each end of the range: up to `months`, at most half the range.
+
+    0 means the range is too short (under 2 months) to compare a start with an end.
+    """
+    return min(months, n_months // 2)
 
 
 def tech_movers(tech: pd.DataFrame, months: int = 6) -> pd.DataFrame:
-    """Change in share of posts mentioning each tech: last `months` vs first `months` of the data.
+    """Change in share of posts mentioning each tech between the start and end of the data.
 
-    Callers pass the months the reader selected, so "change" means change across that window.
-    Returns tech, earlier_share, recent_share, change_pts (percentage points), sorted by change.
+    Compares the average of the first `window` months with the last `window` months, where
+    window = movers_window(...). Callers pass the months the reader selected. Returns tech,
+    earlier_share, recent_share, change_pts (percentage points), sorted by change.
     """
+    cols = ["tech", "earlier_share", "recent_share", "change_pts"]
     if tech.empty:
-        return pd.DataFrame(columns=["tech", "earlier_share", "recent_share", "change_pts"])
+        return pd.DataFrame(columns=cols)
     all_months = sorted(tech["thread_month"].unique())
-    window = min(months, max(1, len(all_months) // 2))
+    window = movers_window(len(all_months), months)
+    if window == 0:
+        return pd.DataFrame(columns=cols)
     earlier, recent = all_months[:window], all_months[-window:]
 
     # Months where a tech isn't mentioned count as 0%, not as missing.
