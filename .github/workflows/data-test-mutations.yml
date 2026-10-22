@@ -1,0 +1,40 @@
+name: Data test mutation check
+
+# Proves each dbt test can fail: corrupts a copy of fixture data one way at a time and
+# requires the matching test to fail. ~3 min of warehouse time, so it runs when the data
+# tests change, weekly, or on demand rather than on every push.
+on:
+  pull_request:
+    paths: ["dbt/**", "scripts/dbt_mutation_check.py", "src/pulse/warehouse.py"]
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: mutations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutations:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      RAW: mut_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
+      PULSE_DATA_DIR: ${{ github.workspace }}/data
+      PULSE_MIN_POSTS_PER_MONTH: "20"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      - run: uv run python scripts/build_fixture_data.py
+      - run: uv run pulse load-warehouse --raw-schema "$RAW"
+      - run: uv run python scripts/dbt_mutation_check.py --source-schema "$RAW"
+      - name: Drop schemas
+        if: always()
+        run: uv run pulse drop-schemas "$RAW"

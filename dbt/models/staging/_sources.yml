@@ -1,0 +1,74 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Snapshot tables written by `pulse load-warehouse` from validated parquet.
+    database: workspace
+    # Raw schema the Python loader writes to (per-PR in CI).
+    schema: "{{ env_var('PULSE_RAW_SCHEMA', 'pulse_raw') }}"
+    config:
+      loaded_at_field: _loaded_at
+    tables:
+      - name: hn_threads
+        description: Monthly "Ask HN - Who is hiring?" threads.
+        columns:
+          - name: thread_id
+            data_tests: [unique, not_null]
+          - name: thread_month
+            data_tests: [unique, not_null]
+          - name: _rescued_data
+            description: Values read_files could not fit the schema. Non-null means upstream drift.
+            data_tests: &no_rescued_data
+              - dbt_utils.expression_is_true:
+                  arguments: { expression: "is null" }
+
+      - name: hn_posts
+        description: Top-level comments (one job post each) that passed the ingestion contract.
+        config:
+          loaded_at_field: posted_at
+          freshness:
+            warn_after: { count: 35, period: day }
+            error_after: { count: 45, period: day }
+        columns:
+          - name: post_id
+            data_tests: [unique, not_null]
+          - name: thread_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments: { to: "source('raw', 'hn_threads')", field: thread_id }
+          - name: _rescued_data
+            data_tests: *no_rescued_data
+
+      - name: bls_jolts
+        description: BLS JOLTS Information-sector levels (thousands), seasonally adjusted.
+        data_tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments: { combination_of_columns: [series_id, month] }
+        columns:
+          - name: measure
+            data_tests:
+              - accepted_values:
+                  arguments: { values: [openings, hires, quits] }
+          - name: value_thousands
+            data_tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  arguments: { min_value: 0 }
+          - name: _rescued_data
+            data_tests: *no_rescued_data
+
+      - name: extractions_rules
+        description: Output of the deterministic rules extractor.
+        columns:
+          - name: post_id
+            data_tests:
+              - unique
+              - not_null
+              - relationships:
+                  arguments: { to: "source('raw', 'hn_posts')", field: post_id }
+          - name: _rescued_data
+            data_tests: *no_rescued_data
+
+      - name: quarantine
+        description: Rows rejected by an ingestion or extraction contract, with the reason.

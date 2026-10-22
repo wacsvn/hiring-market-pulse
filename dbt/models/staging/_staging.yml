@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: stg_extractions
+    description: One row per post from the extractor used for reporting.
+    columns:
+      - name: post_id
+        data_tests: [unique, not_null]
+      - name: work_mode
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: [remote, hybrid, onsite, unknown] }
+      - name: seniority
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [intern, junior, mid, senior, staff_plus, lead_manager, unknown]
+      - name: primary_role_family
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [engineering, data_ml, product, design, sales_marketing, operations, other]
+      - name: salary_period
+        data_tests:
+          - accepted_values:
+              arguments: { values: [year, hour] }
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: salary_min_not_above_max
+          arguments: { expression: "salary_min <= salary_max" }
+          config: { where: "salary_min is not null" }
+      - dbt_utils.expression_is_true:
+          name: salary_bounds_set_together
+          arguments: { expression: "(salary_min is null) = (salary_max is null)" }

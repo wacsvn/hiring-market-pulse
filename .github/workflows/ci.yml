@@ -38,19 +38,43 @@ jobs:
         env:
           SCRUB_PATTERN: ${{ secrets.SCRUB_PATTERN }}
 
-  warehouse:
-    name: Warehouse connectivity (dbt debug)
+  dbt:
+    name: dbt build on fixture data (Databricks)
     runs-on: ubuntu-latest
+    needs: python
     # Secrets are not available to PRs from forks; skip rather than fail there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      # One isolated pair of schemas per PR (or branch), dropped at the end of the job.
+      PULSE_RAW_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
+      DBT_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}
+      PULSE_DATA_DIR: ${{ github.workspace }}/data
+      PULSE_MIN_POSTS_PER_MONTH: "20" # fixture threads are trimmed to 40 posts each
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.1
         with:
           enable-cache: true
-      - run: uv sync --extra warehouse --locked
-      - run: uv run dbt debug --project-dir dbt --profiles-dir dbt
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      - run: uv sync --all-extras --locked
+      - name: Check warehouse connectivity
+        # Fails here (not in a test step) if Databricks is unreachable or over its daily quota.
+        run: uv run dbt debug --project-dir dbt --profiles-dir dbt
+      - name: Build fixture dataset (same pipeline code as production, recorded API responses)
+        run: uv run python scripts/build_fixture_data.py
+      - run: uv run pulse load-warehouse --raw-schema "$PULSE_RAW_SCHEMA"
+      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt build --project-dir dbt --profiles-dir dbt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dbt-run-results
+          path: |
+            dbt/target/run_results.json
+            dbt/target/manifest.json
+          if-no-files-found: ignore
+      - name: Drop CI schemas
+        if: always()
+        run: uv run pulse drop-schemas "$PULSE_RAW_SCHEMA" "$DBT_SCHEMA"
