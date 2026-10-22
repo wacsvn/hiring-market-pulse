@@ -170,9 +170,14 @@ def run_dbt(test: str, raw_schema: str, dbt_schema: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-schema", default="pulse_dev_raw")
+    ap.add_argument("--mut-schema", help="schema for the corrupted copy (default <source>_mut)")
+    ap.add_argument(
+        "--mut-dbt-schema", help="dbt schema for mutant runs (default <source>_mut_dbt)"
+    )
     args = ap.parse_args()
     src = args.source_schema
-    mut, mut_dbt = f"{src}_mut", f"{src}_mut_dbt"
+    mut = args.mut_schema or f"{src}_mut"
+    mut_dbt = args.mut_dbt_schema or f"{src}_mut_dbt"
 
     tables = list(DATASETS)
     with connect() as conn, conn.cursor() as cur:
