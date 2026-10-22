@@ -8,7 +8,7 @@
 **[Live dashboard](https://hiring-market-pulse.streamlit.app/)** ·
 **[Data model docs](https://wacsvn.github.io/hiring-market-pulse/)** ·
 [Analysis memo (notebook)](analysis/hiring_market_findings.ipynb) ·
-[Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md) ·
+[Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md)
 
 > **In short:** a daily pipeline loads 11,500+ job posts and official labor data into
 > Databricks, models them with dbt, and publishes a dashboard only after 52 data tests
