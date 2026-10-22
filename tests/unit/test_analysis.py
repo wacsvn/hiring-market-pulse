@@ -23,23 +23,49 @@ def _monthly(n: int, last_complete: bool = False) -> pd.DataFrame:
     )
 
 
-def test_headline_kpis_use_latest_complete_month_vs_year_earlier() -> None:
-    kpis = {k.label: k for k in analysis.headline_kpis(_monthly(15))}
-    posts = kpis["Job posts"]
-    # 15 months, the last is incomplete -> latest complete is index 13, a year earlier is index 1.
-    assert posts.value == 113
-    assert posts.previous == 101
-    assert posts.delta == 12
+def _posts(result: analysis.KpiSet | None) -> analysis.Kpi:
+    assert result is not None
+    return next(k for k in result.kpis if k.label == "Job posts")
 
 
-def test_headline_kpis_without_a_year_of_history() -> None:
-    kpis = analysis.headline_kpis(_monthly(6))
-    assert all(k.previous is None and k.delta is None for k in kpis)
+def test_headline_kpis_compare_latest_complete_month_with_first_month() -> None:
+    result = analysis.headline_kpis(_monthly(15))
+    # 15 months, the last is incomplete -> latest complete is index 13; first is index 0.
+    assert result is not None
+    assert result.month == pd.Timestamp("2025-02-01")
+    assert result.compared_with == pd.Timestamp("2024-01-01")
+    posts = _posts(result)
+    assert (posts.value, posts.previous, posts.delta) == (113, 100, 13)
 
 
-def test_headline_kpis_empty_when_no_complete_month() -> None:
-    df = _monthly(1)
-    assert analysis.headline_kpis(df) == []
+def test_headline_kpis_follow_the_selected_range() -> None:
+    """Found in review: the KPIs ignored the date filter."""
+    df = _monthly(15)
+    result = analysis.headline_kpis(
+        df, start=pd.Timestamp("2024-03-01"), end=pd.Timestamp("2024-08-01")
+    )
+    assert result is not None
+    assert result.month == pd.Timestamp("2024-08-01")
+    assert result.compared_with == pd.Timestamp("2024-03-01")
+    assert (_posts(result).value, _posts(result).previous) == (107, 102)
+
+
+def test_headline_kpis_single_month_has_no_comparison() -> None:
+    result = analysis.headline_kpis(
+        _monthly(6), start=pd.Timestamp("2024-02-01"), end=pd.Timestamp("2024-02-01")
+    )
+    assert result is not None
+    assert result.compared_with is None
+    assert all(k.delta is None for k in result.kpis)
+
+
+def test_headline_kpis_none_when_no_complete_month() -> None:
+    assert analysis.headline_kpis(_monthly(1)) is None
+
+
+@pytest.mark.parametrize(("n", "expected"), [(1, 0), (2, 1), (5, 2), (12, 6), (36, 6)])
+def test_movers_window(n: int, expected: int) -> None:
+    assert analysis.movers_window(n) == expected
 
 
 def test_tech_movers_short_window_splits_in_half() -> None:
