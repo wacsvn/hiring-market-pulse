@@ -45,15 +45,18 @@ jobs:
     needs: python
     # Secrets are not available to PRs from forks; skip rather than fail there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # The free Databricks tier allows 500 tables, and dropped tables still count for 7 days.
+    # So CI reuses one fixed pair of schemas for every run (tables are replaced in place, no
+    # new tables), and warehouse jobs run one at a time across PRs.
+    concurrency:
+      group: warehouse
+      cancel-in-progress: false
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      # One isolated pair of schemas per PR (or branch), reused across its runs (tables are
-      # replaced in place) and dropped by ci-cleanup.yml when the PR closes. Dropping after
-      # every run would count every table against the workspace table quota for 7 days.
-      PULSE_RAW_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
-      DBT_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}
+      PULSE_RAW_SCHEMA: pulse_dev_raw
+      DBT_SCHEMA: pulse_dev
       PULSE_DATA_DIR: ${{ github.workspace }}/data
       PULSE_MIN_POSTS_PER_MONTH: "10" # fixture threads are trimmed to 15 posts each
     steps:

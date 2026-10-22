@@ -175,7 +175,7 @@ flowchart LR
     direction TB
     L["Pre-commit hooks<br/>lint, format, types"] --> U["85 unit tests<br/>+ extractor accuracy gate"]
     S[Scrub check]
-    D["dbt build + 52 data tests<br/>in the PR's own Databricks schema"]
+    D["dbt build + 52 data tests<br/>in a dedicated CI schema"]
     E["16 Playwright tests<br/>against the dashboard"]
     M["Mutation check<br/>(when data tests change)"]
   end
@@ -193,12 +193,11 @@ flowchart LR
 
 | Workflow | Trigger | What it gates or delivers |
 |---|---|---|
-| [`ci.yml`](.github/workflows/ci.yml) | every PR and push to `main` | Required checks: pre-commit hooks (lint, format, types), unit tests and the accuracy gate, scrub check, dbt build with all data tests in a per-PR Databricks schema, Playwright e2e |
+| [`ci.yml`](.github/workflows/ci.yml) | every PR and push to `main` | Required checks: pre-commit hooks (lint, format, types), unit tests and the accuracy gate, scrub check, dbt build with all data tests in a dedicated CI schema, Playwright e2e |
 | [`data-test-mutations.yml`](.github/workflows/data-test-mutations.yml) | PRs touching dbt, weekly | Proves the data tests catch 11 kinds of injected faults |
 | [`refresh.yml`](.github/workflows/refresh.yml) | daily | Rebuilds everything from the APIs; publishes only if every hard test passes, otherwise opens an issue |
 | [`docs.yml`](.github/workflows/docs.yml) | dbt changes, after each refresh | Publishes the [data model docs](https://wacsvn.github.io/hiring-market-pulse/) |
 | [`live-smoke.yml`](.github/workflows/live-smoke.yml) | daily | Loads the deployed dashboard and checks every tab renders |
-| [`ci-cleanup.yml`](.github/workflows/ci-cleanup.yml) | PR closed | Drops the PR's Databricks schemas |
 
 The same lint and type checks run locally before each commit (`uv run pre-commit install`),
 so "passes on my machine" and "passes in CI" mean the same thing.

@@ -18,11 +18,15 @@ jobs:
   mutations:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Fixed, reused schemas (see the note in ci.yml): no new tables per run.
+    concurrency:
+      group: warehouse
+      cancel-in-progress: false
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      RAW: mut_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
+      RAW: pulse_dev_raw # mutant copies go to pulse_dev_raw_mut and pulse_dev_raw_mut_dbt
       PULSE_DATA_DIR: ${{ github.workspace }}/data
       PULSE_MIN_POSTS_PER_MONTH: "10"
     steps:
