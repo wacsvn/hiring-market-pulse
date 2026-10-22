@@ -10,7 +10,6 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
 import charts
-
 import data
 from pulse import analysis
 

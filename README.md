@@ -90,10 +90,15 @@ here has to be shown to fail:
   reported "clean" when `git grep` errored. It now treats errors as failures and refuses
   to run without a pattern.
 
-Bugs these checks caught during development include a DECIMAL rounding issue that made
-work-mode shares add up to 1.00001, plural job titles ("Software Engineers") being
-missed, "go" the verb counted as the Go language, and test fixtures that breached the
-pipeline's own quarantine limit.
+Bugs these checks caught during development:
+
+- A DECIMAL rounding issue that made work-mode shares add up to 1.00001.
+- A blind spot in a data test. A month whose fetch returned zero posts vanished from the
+  monthly table, so the "posts per month in range" check had nothing to flag. The
+  mutation check exposed it, and the test now counts from the threads.
+- Plural job titles ("Software Engineers") missed by the role extractor.
+- "go" the verb counted as the Go language.
+- Test fixtures that breached the pipeline's own quarantine limit.
 
 ## Run it locally
 
