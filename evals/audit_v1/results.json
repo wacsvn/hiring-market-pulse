@@ -16,6 +16,12 @@
   },
   "errors": [
     {
+      "post_id": 48363249,
+      "field": "seniority",
+      "expected": "staff_plus",
+      "got": "unknown"
+    },
+    {
       "post_id": 49170963,
       "field": "role_families",
       "expected": [
@@ -190,12 +196,6 @@
       "post_id": 49530430,
       "field": "seniority",
       "expected": "staff_plus",
-      "got": "senior"
-    },
-    {
-      "post_id": 48365048,
-      "field": "seniority",
-      "expected": "unknown",
       "got": "senior"
     },
     {
