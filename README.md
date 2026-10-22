@@ -3,7 +3,15 @@
 [![CI](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml)
 [![Refresh data](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml)
 
-**Live dashboard: <https://hiring-market-pulse.streamlit.app/>**
+**[Live dashboard](https://hiring-market-pulse.streamlit.app/)** ·
+**[Data model docs](https://wacsvn.github.io/hiring-market-pulse/)** ·
+[Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md) ·
+[How AI was used](docs/ai-assisted-workflow.md)
+
+> **In short:** a daily pipeline loads 11,500+ job posts and official labor data into
+> Databricks, models them with dbt, and publishes a dashboard only after 52 data tests
+> pass. The tests are themselves tested (11/11 injected faults caught), and the
+> free-text extraction is scored against hand-checked posts (work mode 98% accurate).
 
 A tested data pipeline and dashboard built on three years of Hacker News' monthly
 **"Who is hiring?"** threads (11,500+ company posts). It tracks how those companies hire
@@ -77,6 +85,9 @@ flowchart LR
    publishes the marts only if `dbt build` passes; otherwise it opens an issue.
 6. **Present:** the [Streamlit app](app/streamlit_app.py) reads the published marts and
    shows its own data-quality status ("51 of 52 checks passed").
+7. **Document:** every model and column is described in dbt, published as a
+   [searchable docs site](https://wacsvn.github.io/hiring-market-pulse/) with lineage
+   and the tests on each column.
 
 ## How quality is enforced
 

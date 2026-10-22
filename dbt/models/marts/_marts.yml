@@ -2,43 +2,112 @@ version: 2
 
 models:
   - name: fct_postings
-    description: One row per HN job post with structured fields. The base for every mart.
+    description: >
+      One row per post in a monthly "Who is hiring?" thread, joined with the fields the
+      extractor pulled from its text. Every mart is built from this table. A post is one
+      company's reply and can cover several roles, so counts are of posts, not openings.
     columns:
       - name: post_id
+        description: Hacker News item id of the post.
         data_tests:
           - unique
           - not_null
           - relationships:
               arguments: { to: "ref('stg_hn_posts')", field: post_id }
       - name: thread_month
+        description: First day of the month the thread covers (the thread title's month).
         data_tests: [not_null]
+      - name: posted_at
+        description: When the post was made (UTC).
+      - name: company
+        description: Company name from the first segment of the header line; null if unclear.
+      - name: work_mode
+        description: >
+          remote = at least one role allows remote work (including country-restricted
+          remote); hybrid = hybrid with no remote option; onsite = onsite only;
+          unknown = not stated.
+      - name: role_families
+        description: Every role family the post mentions (array).
+      - name: primary_role_family
+        description: First role family mentioned; 'other' when none is recognised.
+      - name: seniority
+        description: Level of the first role named (intern … lead_manager); unknown if not stated.
+      - name: locations
+        description: Major metros recognised in the post (array).
+      - name: tech
+        description: Technologies mentioned anywhere in the post (array of normalised names).
+      - name: visa_sponsorship
+        description: true if sponsorship is offered, false if ruled out, null if not mentioned.
+      - name: salary_min
+        description: Lower bound of the first salary range in the post, in its own currency.
+      - name: salary_max
+        description: Upper bound of the first salary range in the post.
+      - name: salary_currency
+        description: ISO currency of the salary range (USD, EUR, GBP, CAD, AUD).
+      - name: salary_period
+        description: year or hour.
+      - name: has_salary
+        description: Whether the post states any salary or rate.
       - name: salary_usd_annual_mid
-        description: Midpoint of a USD annual salary range; null for other currencies/periods.
+        description: >
+          Midpoint of the posted range when it is a USD annual salary; null otherwise.
+          This is the only salary figure used in medians.
         data_tests:
           - dbt_utils.accepted_range:
               arguments: { min_value: 15000, max_value: 1500000 }
+      - name: extractor
+        description: Which extractor produced the fields (e.g. rules).
+      - name: is_complete_month
+        description: False for the current month, whose thread is still collecting posts.
 
   - name: mart_monthly_summary
-    description: Headline KPIs per month. The incomplete (current) month is flagged.
+    description: >
+      Headline KPIs per thread month, as shown on the dashboard's Overview tab. The
+      current, still-open month is flagged with is_complete_month = false.
     columns:
       - name: thread_month
+        description: Month the thread covers.
         data_tests: [unique, not_null]
+      - name: is_complete_month
+        description: False for the month still in progress.
+      - name: postings
+        description: Number of posts in the month's thread.
       - name: share_remote
+        description: Share of posts where at least one role allows remote work.
         data_tests: &share_0_1
           - dbt_utils.accepted_range:
               arguments: { min_value: 0, max_value: 1 }
+      - name: share_hybrid
+        description: Share of posts that are hybrid with no remote option.
+      - name: share_onsite
+        description: Share of posts that are onsite only. Posts not stating a mode are in none.
+      - name: share_with_salary
+        description: Share of posts stating a salary or hourly rate (pay transparency).
+      - name: median_salary_usd
+        description: Median of salary_usd_annual_mid among posts with a USD annual range.
+      - name: salary_sample_size
+        description: How many posts the median salary is based on.
+      - name: share_visa_sponsorship_mentioned
+        description: Share of posts that offer visa sponsorship.
     data_tests:
       - dbt_utils.expression_is_true:
           name: work_mode_shares_at_most_one
           arguments: { expression: "share_remote + share_hybrid + share_onsite <= 1.000001" }
 
   - name: mart_role_mix
-    description: Postings per role family per month. A post can list several families.
+    description: Posts per role family per month. A post can list several families.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments: { combination_of_columns: [thread_month, role_family] }
     columns:
+      - name: thread_month
+        description: Month the thread covers.
+      - name: role_family
+        description: engineering, data_ml, product, design, sales_marketing, operations, other.
+      - name: postings
+        description: Posts mentioning this role family.
       - name: share_of_postings
+        description: postings / all posts that month.
         data_tests: *share_0_1
 
   - name: mart_tech_trends
@@ -47,20 +116,67 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments: { combination_of_columns: [thread_month, tech] }
     columns:
+      - name: thread_month
+        description: Month the thread covers.
+      - name: tech
+        description: Normalised technology name (e.g. python, typescript, llm).
+      - name: postings
+        description: Posts mentioning the technology.
       - name: share_of_postings
+        description: postings / all posts that month.
         data_tests: *share_0_1
 
   - name: mart_salary_bands
-    description: Trailing-12-month USD salary quartiles by role family and seniority.
+    description: >
+      Posted USD annual salary quartiles by role family and seniority over the trailing
+      12 months. Groups with fewer than 20 posts are kept but marked not reliable.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments: { combination_of_columns: [primary_role_family, seniority] }
       - dbt_utils.expression_is_true:
           name: salary_quartiles_ordered
           arguments: { expression: "p25_usd <= median_usd and median_usd <= p75_usd" }
+    columns:
+      - name: sample_size
+        description: Posts with a USD annual salary in the group.
+      - name: is_reliable
+        description: sample_size >= 20.
+      - name: p25_usd
+        description: 25th percentile of posted salary midpoints.
+      - name: median_usd
+        description: Median posted salary midpoint.
+      - name: p75_usd
+        description: 75th percentile of posted salary midpoints.
 
   - name: mart_hn_vs_jolts
-    description: HN volume vs BLS JOLTS openings on overlapping complete months, indexed to 100.
+    description: >
+      HN post volume next to official BLS JOLTS job openings for the Information sector,
+      on complete months both sources cover, each indexed to 100 at the first month.
+      JOLTS runs about two months behind and its newest month is preliminary.
     columns:
       - name: month
+        description: Calendar month.
         data_tests: [unique, not_null]
+      - name: hn_postings
+        description: Posts in that month's HN thread.
+      - name: jolts_openings_k
+        description: JOLTS job openings, Information sector, seasonally adjusted (thousands).
+      - name: jolts_hires_k
+        description: JOLTS hires (thousands).
+      - name: jolts_quits_k
+        description: JOLTS quits (thousands).
+      - name: jolts_is_preliminary
+        description: True if any JOLTS value for the month is still preliminary.
+      - name: hn_index
+        description: hn_postings indexed to 100 at the first month.
+      - name: jolts_openings_index
+        description: jolts_openings_k indexed to 100 at the first month.
+      - name: hn_mom_pct
+        description: Month-over-month % change in HN posts.
+      - name: jolts_mom_pct
+        description: Month-over-month % change in JOLTS openings.
+      - name: is_divergent
+        description: >
+          One series moved by at least the divergence threshold (25%) while the other
+          barely moved, or both moved that much in opposite directions. A signal to look
+          at, not an error.

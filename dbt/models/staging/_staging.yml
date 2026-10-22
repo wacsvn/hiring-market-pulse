@@ -1,8 +1,19 @@
 version: 2
 
 models:
+  - name: stg_hn_threads
+    description: Monthly "Who is hiring?" threads, one row per month.
+  - name: stg_hn_posts
+    description: Top-level comments on the threads (one per company post), with text length.
+  - name: stg_bls_jolts
+    description: BLS JOLTS Information-sector openings, hires and quits by month (thousands).
+  - name: stg_quarantine
+    description: Records rejected by an ingestion or extraction contract, with the reason.
   - name: stg_extractions
-    description: One row per post from the extractor used for reporting.
+    description: >
+      One row per post from the extractor used for reporting (currently the rules
+      extractor, whose accuracy is measured in evals/). primary_role_family is the first
+      role family the post mentions.
     columns:
       - name: post_id
         data_tests: [unique, not_null]
