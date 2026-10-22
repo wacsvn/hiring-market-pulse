@@ -1,0 +1,52 @@
+name: Publish dbt docs
+
+# Builds the dbt documentation site (models, columns, tests, lineage) against the
+# production schema and publishes it to GitHub Pages as a single static page.
+on:
+  push:
+    branches: [main]
+    paths: ["dbt/**", ".github/workflows/docs.yml"]
+  workflow_run:
+    workflows: ["Refresh data"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    # After a refresh, only republish when it succeeded (fresh row counts in the catalog).
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      PULSE_RAW_SCHEMA: pulse_raw
+      DBT_SCHEMA: pulse
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      - name: Generate docs (read-only; compiles models and reads the catalog)
+        run: uv run dbt docs generate --static --project-dir dbt --profiles-dir dbt
+      - run: mkdir site && cp dbt/target/static_index.html site/index.html
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v5

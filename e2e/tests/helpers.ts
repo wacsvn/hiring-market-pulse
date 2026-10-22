@@ -34,15 +34,30 @@ export type Trace = { name: string; points: number; x: unknown[]; color: unknown
  */
 export async function traces(plot: Locator): Promise<Trace[]> {
   await expect(plot).toBeVisible();
-  return plot.evaluate((el: any) =>
-    (el._fullData ?? []).map((t: any, i: number) => ({
-      name: t.name,
-      points: (el.calcdata?.[i] ?? []).filter((p: any) => p.x !== undefined || p.s !== undefined)
-        .length,
-      x: Array.isArray(t.x) ? t.x : [],
-      color: t.line?.color ?? t.marker?.color,
-    })),
-  );
+  // The chart's DOM node can exist before Plotly attaches its data, on first load and on
+  // every Streamlit rerun. Check readiness and read in ONE evaluate (separate calls raced
+  // with reruns), and retry until a fully rendered chart is seen.
+  let result: Trace[] = [];
+  await expect
+    .poll(
+      async () => {
+        result = await plot.evaluate((el: any) => {
+          const full = el._fullData ?? [];
+          if (!full.length || (el.calcdata ?? []).length < full.length) return [];
+          return full.map((t: any, i: number) => ({
+            name: t.name,
+            points: el.calcdata[i].filter((p: any) => p.x !== undefined || p.s !== undefined)
+              .length,
+            x: Array.isArray(t.x) ? t.x : [],
+            color: t.line?.color ?? t.marker?.color,
+          }));
+        });
+        return result.length;
+      },
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
+  return result;
 }
 
 export async function openTab(page: Page, name: string): Promise<void> {

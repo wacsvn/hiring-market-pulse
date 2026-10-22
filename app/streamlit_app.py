@@ -459,3 +459,8 @@ with tab_quality:
         "**Method notes.** Salaries are posted ranges, not offers, and only USD annual ranges "
         "feed the medians. HN skews toward startups and software roles."
     )
+    st.markdown(
+        "Every table and column is documented in the "
+        "[data model docs](https://wacsvn.github.io/hiring-market-pulse/); code and tests are "
+        "on [GitHub](https://github.com/wacsvn/hiring-market-pulse)."
+    )
