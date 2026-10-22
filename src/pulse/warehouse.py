@@ -112,6 +112,35 @@ def load_raw(raw_schema: str, log: Callable[[str], None] = print) -> dict[str, i
     return counts
 
 
+MARTS = [
+    "mart_monthly_summary",
+    "mart_role_mix",
+    "mart_tech_trends",
+    "mart_salary_bands",
+    "mart_hn_vs_jolts",
+    "stg_quarantine",
+]
+
+
+def export_marts(schema: str, out_dir: Path, log: Callable[[str], None] = print) -> None:
+    """Write each mart to <out_dir>/<mart>.parquet for the dashboard."""
+    import pandas as pd
+
+    _check_ident(schema)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with connect() as conn, conn.cursor() as cur:
+        for mart in MARTS:
+            cur.execute(f"SELECT * FROM {CATALOG}.{schema}.{mart}")
+            cols = [d[0] for d in cur.description]
+            df = pd.DataFrame([tuple(r) for r in cur.fetchall()], columns=cols)
+            # Databricks returns DECIMAL as Python Decimal; the app wants plain floats.
+            for c in df.columns:
+                if df[c].map(lambda v: type(v).__name__ == "Decimal").any():
+                    df[c] = df[c].astype(float)
+            load.write(df, out_dir / f"{mart}.parquet")
+            log(f"exported {mart}: {len(df)} rows")
+
+
 def drop_schemas(*schemas: str) -> None:
     with connect() as conn, conn.cursor() as cur:
         for s in schemas:

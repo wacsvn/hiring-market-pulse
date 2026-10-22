@@ -11,6 +11,14 @@ from pulse.sources.bls_jolts import BLSClient
 from pulse.sources.hn_algolia import BASE_URL, HNClient, parse_thread_month
 from tests.conftest import bls_transport, hn_transport, load_fixture
 
+# Size set in scripts/record_fixtures.py
+FIXTURE_THREADS = 14
+
+
+def _fixture_post_count(thread_id: int) -> int:
+    item = load_fixture(f"hn_item_{thread_id}.json")
+    return sum(1 for c in item["children"] if c.get("text"))
+
 
 @pytest.mark.parametrize(
     ("title", "expected"),
@@ -30,7 +38,7 @@ def test_parse_thread_month(title: str, expected: date | None) -> None:
 def test_find_threads_keeps_only_hiring_threads(hn_client: HNClient) -> None:
     batch = hn_client.find_threads(since=date(2000, 1, 1))
     months = [t.thread_month for t in batch.accepted]
-    assert len(months) == 3
+    assert len(months) == FIXTURE_THREADS
     assert months == sorted(months), "threads must come back in month order"
     assert all(t.title.startswith("Ask HN: Who is hiring?") for t in batch.accepted)
 
@@ -50,9 +58,10 @@ def test_find_threads_respects_since(hn_client: HNClient) -> None:
 def test_fetch_posts_quarantines_deleted_comments(hn_client: HNClient) -> None:
     thread = hn_client.find_threads(since=date(2000, 1, 1)).accepted[0]
     batch = hn_client.fetch_posts(thread)
-    assert len(batch.accepted) == 40
+    expected = _fixture_post_count(thread.thread_id)
+    assert len(batch.accepted) == expected
     assert {p.thread_id for p in batch.accepted} == {thread.thread_id}
-    assert len({p.post_id for p in batch.accepted}) == 40, "post ids must be unique"
+    assert len({p.post_id for p in batch.accepted}) == expected, "ids must be unique"
     assert [(r.record_key, r.reason) for r in batch.rejected] == [("2", "empty or deleted")]
 
 
@@ -66,7 +75,7 @@ def test_fetch_posts_rejects_contract_violations() -> None:
     client = HNClient(httpx.Client(base_url=BASE_URL, transport=hn_transport(corrupt)))
     thread = client.find_threads(since=date(2000, 1, 1)).accepted[0]
     batch = client.fetch_posts(thread)
-    assert len(batch.accepted) == 38
+    assert len(batch.accepted) == _fixture_post_count(thread.thread_id) - 2
     reasons = " ".join(r.reason for r in batch.rejected)
     assert "future" in reasons
     assert "created_at_i" in reasons

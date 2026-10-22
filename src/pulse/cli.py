@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from pulse import pipeline
+from pulse import pipeline, quality
 from pulse.sources.bls_jolts import BLSClient
 from pulse.sources.hn_algolia import HNClient
 
@@ -60,6 +62,25 @@ def load_warehouse(
     from pulse import warehouse
 
     warehouse.load_raw(raw_schema, log=typer.echo)
+
+
+@app.command("export-marts")
+def export_marts(
+    schema: Annotated[str, typer.Option(help="Databricks schema dbt built into.")] = "pulse",
+    out: Annotated[Path, typer.Option(help="Output directory.")] = Path("data/marts"),
+    dbt_results: Annotated[
+        Path | None, typer.Option(help="dbt run_results.json to summarise for the app.")
+    ] = None,
+) -> None:
+    """Export the marts (and a data-quality summary) as parquet/JSON for the dashboard."""
+    from pulse import warehouse
+
+    warehouse.export_marts(schema, out, log=typer.echo)
+    meta: dict[str, object] = {"exported_at": datetime.now(UTC).isoformat(), "schema": schema}
+    if dbt_results and dbt_results.exists():
+        meta["dbt"] = quality.summarise_run_results(json.loads(dbt_results.read_text()))
+    (out / "metadata.json").write_text(json.dumps(meta, indent=2))
+    typer.echo(f"wrote {out / 'metadata.json'}")
 
 
 @app.command("drop-schemas")

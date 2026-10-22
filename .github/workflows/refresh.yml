@@ -1,0 +1,67 @@
+name: Refresh data
+
+# Daily: fetch -> validate -> extract -> load -> dbt build (tests gate publishing) -> publish.
+# The dashboard reads the `data-latest` release, so a failed run leaves it on the last
+# good data instead of showing anything unvalidated.
+on:
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write # publish the release assets
+  issues: write # report failures
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+      PULSE_RAW_SCHEMA: pulse_raw
+      DBT_SCHEMA: pulse
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - name: Check warehouse connectivity
+        run: uv run dbt debug --project-dir dbt --profiles-dir dbt
+      - name: Ingest (36 months of threads + BLS JOLTS)
+        run: uv run pulse ingest --months 36
+      - run: uv run pulse extract
+      - run: uv run pulse load-warehouse --raw-schema "$PULSE_RAW_SCHEMA"
+      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      - name: Source freshness (warns after 35 days without new posts, fails after 45)
+        run: uv run dbt source freshness --project-dir dbt --profiles-dir dbt
+      - name: Build models and run data tests
+        run: uv run dbt build --project-dir dbt --profiles-dir dbt
+      - name: Export marts for the dashboard
+        run: >
+          uv run pulse export-marts --schema "$DBT_SCHEMA" --out data/marts
+          --dbt-results dbt/target/run_results.json
+      - name: Publish to the data-latest release
+        run: |
+          gh release view data-latest >/dev/null 2>&1 || gh release create data-latest \
+            --title "Latest published data" --latest=false \
+            --notes "Dashboard data. Replaced by the refresh workflow after all data tests pass."
+          gh release upload data-latest data/marts/* --clobber
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: refresh-artifacts
+          path: |
+            dbt/target/run_results.json
+            data/quarantine
+          if-no-files-found: ignore
+      - name: Report failure
+        if: failure()
+        run: uv run python scripts/report_refresh_failure.py

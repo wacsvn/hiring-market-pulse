@@ -41,6 +41,8 @@ packages = ["src/pulse"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# First-party code lives here; without this, a local data/ folder changes import sorting.
+src = ["src", "app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
