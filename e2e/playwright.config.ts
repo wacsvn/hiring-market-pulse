@@ -1,12 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Two app instances: one on frozen fixture marts (known numbers to assert against),
-// one pointed at an empty directory to exercise the "no data yet" state.
-const app = (port: number, martsDir: string) => ({
+// Three app instances: frozen fixture marts (known numbers to assert against), an empty
+// directory ("no data yet"), and an unreachable URL (published data can't be fetched).
+const app = (port: number, env: Record<string, string>) => ({
   command:
     `uv run streamlit run app/streamlit_app.py --server.port ${port} --server.headless true`,
   cwd: '..',
-  env: { PULSE_MARTS_DIR: martsDir },
+  env,
   url: `http://localhost:${port}/_stcore/health`,
   reuseExistingServer: !process.env.CI,
   timeout: 120_000,
@@ -26,5 +26,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 1000 } } }],
-  webServer: [app(8601, 'tests/fixtures/marts'), app(8602, 'tests/fixtures/no-marts')],
+  webServer: [
+    app(8601, { PULSE_MARTS_DIR: 'tests/fixtures/marts' }),
+    app(8602, { PULSE_MARTS_DIR: 'tests/fixtures/no-marts' }),
+    app(8603, { PULSE_MARTS_URL: 'http://127.0.0.1:9/nothing-here' }), // port 9: refused
+  ],
 });

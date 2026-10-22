@@ -27,6 +27,7 @@ class Marts:
     frames: dict[str, pd.DataFrame]
     metadata: dict[str, Any] = field(default_factory=dict)
     source: str = ""
+    error: str | None = None  # set when the source couldn't be read at all
 
     def __getitem__(self, name: str) -> pd.DataFrame:
         return self.frames[name]
@@ -65,9 +66,14 @@ def _read_metadata(source: str) -> dict[str, Any]:
 
 def load() -> Marts:
     source = _source()
-    frames = {name: _read(source, name) for name in MARTS}
+    error = None
+    try:
+        frames = {name: _read(source, name) for name in MARTS}
+    except Exception as e:  # network/HTTP/parquet errors: show a message, not a traceback
+        frames = {name: pd.DataFrame() for name in MARTS}
+        error = f"{type(e).__name__}: {e}"
     if frames["mart_monthly_summary"].empty:
         frames["mart_monthly_summary"] = pd.DataFrame(
             columns=["thread_month", "is_complete_month", "postings"]
         )
-    return Marts(frames, _read_metadata(source), source)
+    return Marts(frames, _read_metadata(source), source, error)
