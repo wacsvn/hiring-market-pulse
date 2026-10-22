@@ -35,8 +35,9 @@ of company from month to month.
   engineering, and high-cost-market roles, and pay-transparency laws make high-pay states
   the most likely to post ranges.
 - **Remote is giving ground, slowly.** Posts where at least one role allows remote
-  work fell from 61% to 51%, while onsite-only rose from 15% to 25%. HN startups are far
-  more remote-friendly than the job market as a whole.
+  work fell from 67% to 55%, while onsite-only rose from 15% to 25%. HN startups are far
+  more remote-friendly than the job market as a whole. (The accuracy audit below found
+  these levels had been understated by about 5 points; the downward trend held.)
 - **AI is the fastest-rising skill mention.** Posts mentioning LLMs/GenAI went from 8% to
   15% (first vs last six months). Postgres, TypeScript and Python also climbed; Vue,
   Django and C++ declined.
@@ -82,12 +83,45 @@ flowchart LR
 | Layer | What runs | Where |
 |---|---|---|
 | Inputs | Data contracts on every record; quarantine with reasons; quarantine-rate limit | [`contracts.py`](src/pulse/contracts.py), [dbt test](dbt/tests/assert_quarantine_rate_below_5pct.sql) |
-| Python | 64 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
+| Python | 79 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
+| Field extraction | Accuracy audit on 50 sampled posts, scored per field; CI fails if any field drops more than 2 points below the committed baseline | [`evals/`](evals) |
 | Data | 52 dbt tests: uniqueness, relationships, accepted values, salary rules, no missing months, freshness, schema drift, cross-source divergence (warn) | [`dbt/`](dbt) |
 | Data tests themselves | Mutation check: corrupts a copy of the data 11 ways; each matching test must fail (11/11) | [`dbt_mutation_check.py`](scripts/dbt_mutation_check.py) |
 | Dashboard | 13 Playwright tests against frozen fixture data: KPIs and their sample-size warnings, filters, chart contents, color stability, empty and unreachable-data states | [`e2e/`](e2e) |
 | Deployed app | Daily smoke test of the live site after each refresh | [`live-smoke.yml`](.github/workflows/live-smoke.yml) |
 | CI | Lint, types, tests, dbt in per-PR Databricks schemas (always dropped), e2e; mutation check when data tests change | [`.github/workflows/`](.github/workflows) |
+
+### Accuracy audit of the extracted fields
+
+Data tests check that the tables are internally consistent. They can't tell you whether
+"remote" was read correctly from a free-text post. For that, 50 recent posts were drawn
+at random (stratified so salary and remote cases appear), labeled field by field, and
+the extractor was scored against the labels ([`evals/`](evals)).
+
+| Field | Before audit | After fixes |
+|---|---|---|
+| Work mode (remote / hybrid / onsite) | 91% | 98% |
+| Salary found when present, absent when not | 98% | 98% |
+| Salary values correct | 93% | 93% |
+| Seniority | 70% | 91% |
+| Role families exactly right | 70% | 70% |
+
+What it found:
+
+- **A definition bug.** The dashboard defines "remote-friendly" as *any role allows remote*,
+  but the extractor checked "hybrid" first, so "Hybrid or Remote (US)" counted as hybrid.
+  Fixed; remote levels rose about 5 points, and the trend was unchanged.
+- **Seniority lived in the body, not the header.** Many posts name roles ("Senior Software
+  Engineer") below the first line. The extractor now reads job titles from the opening of
+  the body, while ignoring prose like "our senior leadership".
+- **8% of posts aren't job ads** (replies to other posts, links, a filled position). They
+  are still counted as posts, and that's a documented gap.
+- Role families stay at 70%: posts listing many roles are the hard case for rules.
+
+How far to trust these numbers: labels were drafted by Claude and are being spot-checked
+by a human (20 of 50). The fixes were made after seeing these posts, so "after" scores are
+optimistic. As an out-of-sample check, 12 randomly chosen posts whose labels changed,
+none of them in the audit, were all changed correctly.
 
 ### Tests that can fail
 
@@ -162,10 +196,11 @@ scripts/          fixture recording, mutation check, scrub check, failure report
 - "Remote-friendly" counts a post if any role in it allows remote work, including
   country-restricted remote.
 - Posts listing several roles often contain several salary ranges (about 29% of posts
-  with a salary). The rules extractor takes the first range, and a few posts in the
-  thread aren't job ads at all. Measuring that error rate is the next milestone.
-- The rules extractor misses things. Seniority is the weakest field: many posts don't
-  state a level, and the "Level not stated" salary band is often higher than "Senior".
+  with a salary). The rules extractor takes the first range.
+- About 8% of posts in the thread aren't job ads (see the accuracy audit) and are still
+  counted.
+- About half of posts don't state a seniority level, so "Level not stated" is the largest
+  salary group.
 - Salaries are posted ranges, not offers, and only USD annual figures feed the medians.
 - JOLTS is published with about a two-month lag, and its newest month is preliminary.
 

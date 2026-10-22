@@ -71,6 +71,9 @@ def export_marts(
     dbt_results: Annotated[
         Path | None, typer.Option(help="dbt run_results.json to summarise for the app.")
     ] = None,
+    audit_results: Annotated[
+        Path, typer.Option(help="Extractor accuracy audit results to publish.")
+    ] = Path("evals/audit_v1/results.json"),
 ) -> None:
     """Export the marts (and a data-quality summary) as parquet/JSON for the dashboard."""
     from pulse import warehouse
@@ -79,6 +82,8 @@ def export_marts(
     meta: dict[str, object] = {"exported_at": datetime.now(UTC).isoformat(), "schema": schema}
     if dbt_results and dbt_results.exists():
         meta["dbt"] = quality.summarise_run_results(json.loads(dbt_results.read_text()))
+    if audit_results.exists():
+        meta["extractor_accuracy"] = quality.summarise_audit(json.loads(audit_results.read_text()))
     (out / "metadata.json").write_text(json.dumps(meta, indent=2))
     typer.echo(f"wrote {out / 'metadata.json'}")
 

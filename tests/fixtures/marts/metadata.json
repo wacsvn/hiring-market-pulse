@@ -10,5 +10,17 @@
     "not_passing": [
       "warn_hn_jolts_divergence"
     ]
+  },
+  "extractor_accuracy": {
+    "job_posts_checked": 46,
+    "sampled_posts": 50,
+    "non_job_post_rate": 0.08,
+    "fields": {
+      "Work mode (remote / hybrid / onsite)": 0.978,
+      "Salary found when present, absent when not": 0.978,
+      "Salary values correct": 0.929,
+      "Seniority": 0.913,
+      "Role families exactly right": 0.696
+    }
   }
 }

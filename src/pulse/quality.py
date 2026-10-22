@@ -5,6 +5,24 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+AUDIT_FIELDS = {
+    "work_mode_accuracy": "Work mode (remote / hybrid / onsite)",
+    "salary_detection_accuracy": "Salary found when present, absent when not",
+    "salary_values_correct": "Salary values correct",
+    "seniority_accuracy": "Seniority",
+    "role_families_exact": "Role families exactly right",
+}
+
+
+def summarise_audit(results: dict[str, Any]) -> dict[str, Any]:
+    """Headline numbers from evals/score.py results, without the per-post error list."""
+    return {
+        "job_posts_checked": results["job_posts"],
+        "sampled_posts": results["sampled_posts"],
+        "non_job_post_rate": results["non_job_post_rate"],
+        "fields": {label: results[key] for key, label in AUDIT_FIELDS.items()},
+    }
+
 
 def summarise_run_results(run_results: dict[str, Any]) -> dict[str, Any]:
     """Condense a dbt run_results.json into counts plus the names of anything not passing."""
