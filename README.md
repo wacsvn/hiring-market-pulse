@@ -3,9 +3,17 @@
 [![CI](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/ci.yml)
 [![Refresh data](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/wacsvn/hiring-market-pulse/actions/workflows/refresh.yml)
 
-A tested data pipeline and dashboard that turns three years of Hacker News **"Who is
-hiring?"** threads (11,500+ job posts) into a picture of the tech job market, then
-checks that picture against official U.S. labor statistics (BLS JOLTS).
+**Live dashboard: <https://hiring-market-pulse.streamlit.app/>**
+
+A tested data pipeline and dashboard built on three years of Hacker News' monthly
+**"Who is hiring?"** threads (11,500+ company posts). It tracks how those companies hire
+(remote work, pay transparency, skills) and compares their activity with official U.S.
+job-openings data (BLS JOLTS).
+
+**Who this covers:** companies that choose to post in the thread. They are mostly
+startups, engineering-heavy, and concentrated in U.S. tech hubs, and one post often
+covers several roles. Treat the numbers as trends within that slice of the market, not
+as figures for tech jobs overall.
 
 The point of the project is less the charts than the machinery behind them: data
 contracts at the door, 52 automated data tests, and a mutation check that proves those
@@ -16,12 +24,19 @@ unless every hard check passes.
 
 ## What the data says
 
-Comparing November 2023 with September 2026 (the latest complete month):
+Comparing November 2023 with September 2026 (the latest complete month). The changes
+over time are more reliable than the levels, because the population stays the same kind
+of company from month to month.
 
-- **Pay transparency more than doubled.** 13% of posts listed a salary, now 31%. The
-  median posted salary went from $160k to $192k (USD annual ranges only).
-- **Remote is giving ground, slowly.** Remote-friendly posts fell from 61% to 51%,
-  while onsite-only rose from 15% to 25%.
+- **Pay transparency more than doubled.** 13% of posts listed a salary, now 31%.
+  Among posts with a USD annual range (69 in September 2026), the median midpoint went
+  from $160k to $192k. That level sits well above typical U.S. software pay (BLS median
+  for software developers was about $132k in 2023) because these are mostly senior,
+  engineering, and high-cost-market roles, and pay-transparency laws make high-pay states
+  the most likely to post ranges.
+- **Remote is giving ground, slowly.** Posts where at least one role allows remote
+  work fell from 61% to 51%, while onsite-only rose from 15% to 25%. HN startups are far
+  more remote-friendly than the job market as a whole.
 - **AI is the fastest-rising skill mention.** Posts mentioning LLMs/GenAI went from 8% to
   15% (first vs last six months). Postgres, TypeScript and Python also climbed; Vue,
   Django and C++ declined.
@@ -70,7 +85,8 @@ flowchart LR
 | Python | 64 pytest tests on recorded API responses, incl. property-based salary parsing | [`tests/`](tests) |
 | Data | 52 dbt tests: uniqueness, relationships, accepted values, salary rules, no missing months, freshness, schema drift, cross-source divergence (warn) | [`dbt/`](dbt) |
 | Data tests themselves | Mutation check: corrupts a copy of the data 11 ways; each matching test must fail (11/11) | [`dbt_mutation_check.py`](scripts/dbt_mutation_check.py) |
-| Dashboard | 11 Playwright tests against frozen fixture data: KPIs, filters, chart contents, color stability, empty state | [`e2e/`](e2e) |
+| Dashboard | 13 Playwright tests against frozen fixture data: KPIs and their sample-size warnings, filters, chart contents, color stability, empty and unreachable-data states | [`e2e/`](e2e) |
+| Deployed app | Daily smoke test of the live site after each refresh | [`live-smoke.yml`](.github/workflows/live-smoke.yml) |
 | CI | Lint, types, tests, dbt in per-PR Databricks schemas (always dropped), e2e; mutation check when data tests change | [`.github/workflows/`](.github/workflows) |
 
 ### Tests that can fail
@@ -143,6 +159,11 @@ scripts/          fixture recording, mutation check, scrub check, failure report
 
 - HN skews toward startups and software roles, and one post can cover many openings.
   Read the trends as signals about that slice of the market.
+- "Remote-friendly" counts a post if any role in it allows remote work, including
+  country-restricted remote.
+- Posts listing several roles often contain several salary ranges (about 29% of posts
+  with a salary). The rules extractor takes the first range, and a few posts in the
+  thread aren't job ads at all. Measuring that error rate is the next milestone.
 - The rules extractor misses things. Seniority is the weakest field: many posts don't
   state a level, and the "Level not stated" salary band is often higher than "Senior".
 - Salaries are posted ranges, not offers, and only USD annual figures feed the medians.

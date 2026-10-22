@@ -12,8 +12,12 @@ const app = (port: number, env: Record<string, string>) => ({
   timeout: 120_000,
 });
 
+const live = !!process.env.LIVE_URL;
+
 export default defineConfig({
   testDir: './tests',
+  // LIVE_URL runs only the deployed-site smoke test, without starting local servers.
+  testMatch: live ? 'live.spec.ts' : '**/*.spec.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,
@@ -26,7 +30,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 1000 } } }],
-  webServer: [
+  webServer: live ? [] : [
     app(8601, { PULSE_MARTS_DIR: 'tests/fixtures/marts' }),
     app(8602, { PULSE_MARTS_DIR: 'tests/fixtures/no-marts' }),
     app(8603, { PULSE_MARTS_URL: 'http://127.0.0.1:9/nothing-here' }), // port 9: refused

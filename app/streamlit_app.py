@@ -57,9 +57,12 @@ marts = load()
 
 st.title("Hiring Market Pulse")
 st.caption(
-    "What thousands of monthly *Hacker News “Who is hiring?”* posts say about the tech job "
-    "market, benchmarked against official U.S. labor statistics (BLS JOLTS)."
+    "Trends in the companies that post in Hacker News' monthly *“Who is hiring?”* thread "
+    "(mostly startups and engineering-heavy, concentrated in U.S. tech hubs), compared with "
+    "official U.S. job-openings data (BLS JOLTS). This is a slice of the tech market, not "
+    "all of it."
 )
+MIN_SALARY_SAMPLE = 20
 
 if marts.is_empty:
     with st.container(key="empty-state"):
@@ -119,6 +122,23 @@ with tab_overview:
     kpis = analysis.headline_kpis(monthly)
     latest = analysis.complete_months(monthly).iloc[-1]["thread_month"]
     st.subheader(f"Latest complete month: {latest:%B %Y}")
+    st.caption(
+        "Each number counts company posts, not individual openings. The same kind of "
+        "company posts every month, so changes over time are more meaningful than the levels."
+    )
+    latest_row = analysis.complete_months(monthly).iloc[-1]
+    salary_n = int(latest_row.get("salary_sample_size", 0) or 0)
+    salary_posts = f"{salary_n} post{'' if salary_n == 1 else 's'}"
+    kpi_help = {
+        "Job posts": "Top-level replies in the month's thread. One post often covers several "
+        "roles.",
+        "Remote-friendly": "Share of posts where at least one role allows remote work, "
+        "including country-restricted remote (e.g. 'Remote, US only').",
+        "List a salary": "Share of posts stating a salary or hourly rate.",
+        "Median posted salary (USD)": f"Median of the midpoints of posted USD annual ranges, "
+        f"from the {salary_posts} that listed one. Posts with salaries skew toward states "
+        "with pay-transparency laws (CA, NY, WA, CO), which are high-pay markets.",
+    }
     # label -> (test key, value format, year-over-year change format)
     kpi_formats = {
         "Job posts": ("posts", lambda v: f"{v:,.0f}", lambda d: f"{d:+,.0f}"),
@@ -132,7 +152,18 @@ with tab_overview:
         with col, st.container(key=f"kpi-{key}"):
             delta = None if k.delta is None else f"{delta_fmt(k.delta)} vs a year ago"
             # Neutral color: more remote work or fewer posts isn't inherently "good" or "bad".
-            st.metric(k.label, value_fmt(k.value), delta, delta_color="off")
+            st.metric(k.label, value_fmt(k.value), delta, delta_color="off", help=kpi_help[k.label])
+    with st.container(key="kpi-notes"):
+        st.caption(
+            f"Median salary is based on {salary_posts} with a USD annual salary. "
+            "“Remote-friendly” means at least one role in the post allows remote work."
+        )
+        if salary_n < MIN_SALARY_SAMPLE:
+            st.warning(
+                f"Only {salary_posts} listed a USD annual salary this month, too few for a "
+                "reliable median.",
+                icon="⚠️",
+            )
 
     left, right = st.columns(2)
     with left:
@@ -150,7 +181,10 @@ with tab_overview:
         show_data(in_range[["thread_month", "postings", "is_complete_month"]], "postings")
     with right:
         st.markdown("**How the work happens**")
-        st.caption("Share of posts by work arrangement. “Remote” = remote work is allowed.")
+        st.caption(
+            "Share of posts by work arrangement. “Remote” = at least one role allows remote "
+            "work. Posts that don't say are left out, so shares can add up to under 100%."
+        )
         st.plotly_chart(
             charts.lines(
                 in_range,
@@ -297,8 +331,8 @@ with tab_salary:
     st.markdown("**Posted salary ranges, last 12 months (USD, annual)**")
     st.caption(
         "Bar = middle 50% of posted salary midpoints; dot = median. Only posts with a USD "
-        "annual salary count. Seniority is often not stated, so many posts land in "
-        "“Level not stated”."
+        "annual salary count, and those skew toward high-pay states with pay-transparency "
+        "laws. Seniority is often not stated, so many posts land in “Level not stated”."
     )
     if bands.empty:
         st.info("No group has enough posts with a salary yet.", icon="ℹ️")

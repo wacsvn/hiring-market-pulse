@@ -33,6 +33,15 @@ test.describe('overview', () => {
     await expect(kpi('median-salary').getByTestId('stMetricDelta')).toContainText('+10,000 USD');
   });
 
+  test('salary KPI states its sample size and warns when it is too small', async ({ page }) => {
+    await openDashboard(page);
+    const notes = byKey(page, 'kpi-notes');
+    // The fixture's latest month has a single post with a USD salary.
+    await expect(notes).toContainText('Median salary is based on 1 post with a USD annual salary');
+    await expect(notes).toContainText('too few for a reliable median');
+    await expect(notes).toContainText('at least one role in the post allows remote work');
+  });
+
   test('posts-per-month chart leaves out the incomplete month', async ({ page }) => {
     await openDashboard(page);
     const [posts] = await traces(chart(page, 'chart-postings'));
