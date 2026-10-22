@@ -13,7 +13,7 @@ data/
 dbt/target/
 dbt/logs/
 dbt/dbt_packages/
-dbt/profiles.yml
 e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
+dbt/.user.yml

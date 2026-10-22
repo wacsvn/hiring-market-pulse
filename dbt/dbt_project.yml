@@ -1,0 +1,15 @@
+name: pulse
+version: "0.1.0"
+config-version: 2
+profile: pulse
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  pulse:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
