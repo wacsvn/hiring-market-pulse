@@ -20,9 +20,10 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy
+      - name: Pre-commit hooks (the same checks that run before each local commit)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: e2e-typecheck # the e2e job type-checks the Playwright tests with Node set up
       - run: uv run pytest --cov --cov-report=term --cov-report=xml
       - uses: actions/upload-artifact@v7
         with:
@@ -48,7 +49,9 @@ jobs:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-      # One isolated pair of schemas per PR (or branch), dropped at the end of the job.
+      # One isolated pair of schemas per PR (or branch), reused across its runs (tables are
+      # replaced in place) and dropped by ci-cleanup.yml when the PR closes. Dropping after
+      # every run would count every table against the workspace table quota for 7 days.
       PULSE_RAW_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
       DBT_SCHEMA: ci_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}
       PULSE_DATA_DIR: ${{ github.workspace }}/data
@@ -75,9 +78,6 @@ jobs:
             dbt/target/run_results.json
             dbt/target/manifest.json
           if-no-files-found: ignore
-      - name: Drop CI schemas
-        if: always()
-        run: uv run pulse drop-schemas "$PULSE_RAW_SCHEMA" "$DBT_SCHEMA"
 
   e2e:
     name: Dashboard e2e (Playwright)

@@ -148,12 +148,15 @@ with tab_overview:
     else:
         since = f"{result.compared_with:%b %Y}" if result.compared_with is not None else None
         with st.container(key="overview-heading"):
-            st.subheader(f"{result.month:%B %Y}")
+            # Both ends of the range are on screen, so moving either slider thumb visibly
+            # changes a number (the big figure is the end month, the line under it the start).
+            st.subheader(f"{since} → {result.month:%b %Y}" if since else f"{result.month:%B %Y}")
             st.caption(
                 (
-                    f"Changes are measured from {since}, the first month in your range. "
+                    "Each card shows the last complete month in your range and how it compares "
+                    "with the first. "
                     if since
-                    else "Pick a wider range to see changes over time. "
+                    else "Pick a wider range to compare two months. "
                 )
                 + "Counts are company posts; one post can cover several jobs."
             )
@@ -179,11 +182,15 @@ with tab_overview:
         for col, k in zip(cols, result.kpis, strict=True):
             key, value_fmt, delta_fmt = kpi_formats[k.label]
             with col, st.container(key=f"kpi-{key}"):
-                delta = None if k.delta is None else f"{delta_fmt(k.delta)} since {since}"
+                delta = None if k.delta is None else delta_fmt(k.delta)
                 # Neutral color: more remote work or fewer posts isn't inherently good or bad.
                 st.metric(
                     k.label, value_fmt(k.value), delta, delta_color="off", help=kpi_help[k.label]
                 )
+                if since:
+                    st.caption(
+                        f"in {result.month:%b %Y} · was **{value_fmt(k.previous)}** in {since}"
+                    )
         with st.container(key="kpi-notes"):
             st.caption(
                 f"Median salary is based on {plural(salary_n, 'post')} with a USD annual "

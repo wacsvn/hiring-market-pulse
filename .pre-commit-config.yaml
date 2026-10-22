@@ -1,0 +1,40 @@
+# The same checks run before every local commit and in CI (ci.yml runs
+# `pre-commit run --all-files`), so "passes locally" and "passes in CI" mean the same thing.
+# Hooks call the project's own pinned tools through uv rather than separate copies.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (lint)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run ruff format
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy (types)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: e2e-typecheck
+        name: tsc (e2e tests)
+        entry: bash -c 'cd e2e && npx tsc'
+        language: system
+        files: ^e2e/.*\.ts$
+        pass_filenames: false
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Recorded API responses and labeled data stay byte-for-byte as recorded.
+      - id: trailing-whitespace
+        exclude: ^(tests/fixtures|evals/audit_v1)/
+      - id: end-of-file-fixer
+        exclude: ^(tests/fixtures|evals/audit_v1)/
+      - id: check-yaml
+        args: [--unsafe] # dbt YAML uses anchors
+      - id: check-added-large-files
+        args: [--maxkb=2048]
