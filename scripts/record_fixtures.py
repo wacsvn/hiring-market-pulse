@@ -12,8 +12,14 @@ from pathlib import Path
 import httpx
 
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
-POSTS_PER_THREAD = 40
-THREADS = 3
+
+
+def posts_for(month_index: int) -> int:
+    """10-15 posts per thread, varying by month so volume trends aren't flat in tests."""
+    return 10 + (month_index * 5) % 6
+
+
+THREADS = 14
 
 
 def main() -> None:
@@ -24,7 +30,7 @@ def main() -> None:
         "/search_by_date",
         params={
             "tags": "story,author_whoishiring",
-            "hitsPerPage": 12,
+            "hitsPerPage": 50,
             "page": 0,
         },
     ).json()
@@ -38,23 +44,27 @@ def main() -> None:
     search["nbHits"] = len(search["hits"])
     (OUT / "hn_search.json").write_text(json.dumps(search, indent=1))
 
+    by_age = sorted(keep, key=lambda h: h["created_at_i"])
+    oldest = by_age[0]
     for hit in keep:
         item = hn.get(f"/items/{hit['objectID']}").json()
-        kids = [c for c in item["children"] if c.get("text")][:POSTS_PER_THREAD]
+        kids = [c for c in item["children"] if c.get("text")][: posts_for(by_age.index(hit))]
         for c in kids:
             c["children"] = []  # replies are not job posts; drop them to keep fixtures small
-        # Synthetic edge case: a deleted comment (null text), as the API returns them.
-        kids.append(
-            {
-                "id": 2,
-                "created_at_i": kids[-1]["created_at_i"],
-                "author": None,
-                "parent_id": item["id"],
-                "type": "comment",
-                "text": None,
-                "children": [],
-            }
-        )
+        # Synthetic edge case, oldest thread only (real deletions are rare): a deleted
+        # comment with null text, as the API returns them.
+        if hit is oldest:
+            kids.append(
+                {
+                    "id": 2,
+                    "created_at_i": kids[-1]["created_at_i"],
+                    "author": None,
+                    "parent_id": item["id"],
+                    "type": "comment",
+                    "text": None,
+                    "children": [],
+                }
+            )
         item["children"] = kids
         (OUT / f"hn_item_{hit['objectID']}.json").write_text(json.dumps(item, indent=1))
 

@@ -24,7 +24,7 @@ jobs:
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       RAW: mut_${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}_raw
       PULSE_DATA_DIR: ${{ github.workspace }}/data
-      PULSE_MIN_POSTS_PER_MONTH: "20"
+      PULSE_MIN_POSTS_PER_MONTH: "10"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.1
