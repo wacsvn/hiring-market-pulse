@@ -237,16 +237,74 @@ uv run pulse export-marts --schema pulse --out data/marts --dbt-results dbt/targ
 uv run streamlit run app/streamlit_app.py
 ```
 
-## Repository map
+## Repository anatomy
+
+How the folders fit together, following the data from source to reader:
+
+```mermaid
+flowchart LR
+  API["HN + BLS APIs"] --> SRC["src/pulse/sources/<br/>collect"]
+  SRC --> CON["src/pulse/contracts.py<br/>validate"]
+  CON --> EXT["src/pulse/extract/<br/>text → fields"]
+  EXT --> WH["src/pulse/warehouse.py<br/>load to Databricks"]
+  WH --> DBT["dbt/models/<br/>staging → marts"]
+  DBT --> DT["dbt/tests/ + *.yml<br/>52 data tests"]
+  DT -->|all pass| PUB["refresh.yml<br/>publish data release"]
+  PUB --> APP["app/<br/>Streamlit dashboard"]
+  PUB --> NB["analysis/<br/>memo notebook"]
+  DBT --> DOCS["docs.yml<br/>dbt docs site"]
+
+  EV["evals/<br/>accuracy audit"] -.checks.-> EXT
+  MUT["scripts/dbt_mutation_check.py"] -.checks.-> DT
+  E2E["e2e/<br/>Playwright"] -.checks.-> APP
+  UT["tests/<br/>pytest"] -.checks.-> SRC
+```
+
+Solid arrows are the data flow; dotted arrows are the checks that guard each stage.
 
 ```
-src/pulse/        ingestion, contracts, extraction, warehouse load, analysis helpers
-dbt/              staging + mart models, schema tests, singular business-rule tests
-app/              Streamlit dashboard (charts.py follows a validated, colorblind-safe palette)
-e2e/              Playwright tests for the dashboard
-tests/            pytest suite and recorded API fixtures
-scripts/          fixture recording, mutation check, scrub check, failure reporting
-.github/workflows CI, daily refresh, mutation check
+hiring-market-pulse/
+├── src/pulse/                  Python pipeline (the `pulse` command-line tool)
+│   ├── sources/                API clients: HN Algolia (posts), BLS (JOLTS openings)
+│   ├── extract/                Rules that turn free-text posts into fields
+│   ├── contracts.py            Data contracts every record must pass
+│   ├── http.py                 API requests with retry and backoff
+│   ├── load.py, batch.py       Local parquet storage and the quarantine
+│   ├── warehouse.py            Upload to Databricks; export marts for the app
+│   ├── pipeline.py, cli.py     Pipeline steps and the `pulse` commands
+│   └── analysis.py, quality.py Calculations and data-quality summaries for the dashboard
+├── dbt/                        Data models and data tests (SQL)
+│   ├── models/staging/         Cleaned raw tables, plus source definitions and tests
+│   ├── models/marts/           Analysis-ready tables the dashboard reads
+│   ├── tests/                  Business-rule tests (no missing months, quarantine rate…)
+│   └── dbt_project.yml         Project settings
+├── app/                        Streamlit dashboard
+│   ├── streamlit_app.py        Page layout, KPIs, tabs
+│   ├── charts.py               Chart builders (colorblind-safe palette)
+│   └── data.py                 Loads the published data
+├── e2e/                        Playwright browser tests (TypeScript)
+│   └── tests/                  Dashboard tests and the live-site smoke test
+├── tests/                      pytest unit tests
+│   └── fixtures/               Recorded API responses and frozen dashboard data
+├── evals/                      Extraction accuracy audit
+│   ├── sample.py, review.py    Draw the sample; human review tool
+│   ├── score.py                Score the extractor against the labels
+│   └── audit_v1/               Sample, labels, review, results, baseline
+├── scripts/                    Mutation check, fixture builders, scrub check, failure reports
+├── analysis/                   Analysis memo (Jupyter notebook, DuckDB SQL)
+├── docs/
+│   ├── case-studies/           Tests that couldn't fail
+│   ├── incidents/              Production incident reports
+│   └── img/                    README screenshots
+├── .github/workflows/
+│   ├── ci.yml                  Required checks on every pull request
+│   ├── refresh.yml             Daily pipeline run; publishes only if tests pass
+│   ├── data-test-mutations.yml Proves the data tests can fail
+│   ├── docs.yml                Publishes the dbt docs site
+│   └── live-smoke.yml          Checks the live dashboard every 8 hours
+├── .pre-commit-config.yaml     Checks run before every local commit
+├── .streamlit/config.toml      Dashboard theme
+└── pyproject.toml              Python dependencies and tool settings
 ```
 
 ## Limitations
