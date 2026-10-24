@@ -102,7 +102,7 @@ flowchart LR
 | Data | 52 dbt tests: uniqueness, relationships, accepted values, salary rules, no missing months, freshness, schema drift, cross-source divergence (warn) | [`dbt/`](dbt) |
 | Data tests themselves | Mutation check: corrupts a copy of the data 11 ways; each matching test must fail (11/11) | [`dbt_mutation_check.py`](scripts/dbt_mutation_check.py) |
 | Dashboard | 16 Playwright tests against frozen fixture data: KPIs following the date range, sample-size warnings, chart contents, color stability, empty and unreachable-data states | [`e2e/`](e2e) |
-| Deployed app | Daily smoke test of the live site after each refresh | [`live-smoke.yml`](.github/workflows/live-smoke.yml) |
+| Deployed app | Smoke test of the live site every 8 hours (also keeps the free-tier app from sleeping) | [`live-smoke.yml`](.github/workflows/live-smoke.yml) |
 | CI/CD | Every PR must pass all checks before it can merge; see below | [`.github/workflows/`](.github/workflows) |
 
 ### Accuracy audit of the extracted fields
@@ -199,7 +199,7 @@ flowchart LR
 | [`data-test-mutations.yml`](.github/workflows/data-test-mutations.yml) | PRs touching dbt, weekly | Proves the data tests catch 11 kinds of injected faults |
 | [`refresh.yml`](.github/workflows/refresh.yml) | daily | Rebuilds everything from the APIs; publishes only if every hard test passes, otherwise opens an issue |
 | [`docs.yml`](.github/workflows/docs.yml) | dbt changes, after each refresh | Publishes the [data model docs](https://wacsvn.github.io/hiring-market-pulse/) |
-| [`live-smoke.yml`](.github/workflows/live-smoke.yml) | daily | Loads the deployed dashboard and checks every tab renders |
+| [`live-smoke.yml`](.github/workflows/live-smoke.yml) | every 8 hours | Loads the public page like a visitor (waking the app if it slept) and checks every tab renders |
 
 The same lint and type checks run locally before each commit (`uv run pre-commit install`),
 so "passes on my machine" and "passes in CI" mean the same thing.

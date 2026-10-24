@@ -1,10 +1,12 @@
 name: Live dashboard smoke test
 
-# Checks the deployed app after the daily refresh (and on demand), so a broken deploy shows
-# up as a red run instead of being found by a visitor.
+# Checks the deployed app every 8 hours (and on demand), so a broken deploy shows up as a red
+# run instead of being found by a visitor. The visit also keeps the free Streamlit app from
+# sleeping: it sleeps after ~12 hours without visitors, and GitHub can start scheduled runs
+# hours late, so 8 hours is the longest interval that reliably keeps it awake.
 on:
   schedule:
-    - cron: "17 13 * * *" # two hours after the refresh workflow
+    - cron: "41 */8 * * *"
   workflow_dispatch:
 
 jobs:
