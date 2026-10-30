@@ -65,6 +65,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
+      - name: Start the warehouse (waits up to 10 minutes)
+        run: uv run pulse wake-warehouse
       - name: Check warehouse connectivity
         # Fails here (not in a test step) if Databricks is unreachable or over its daily quota.
         run: uv run dbt debug --project-dir dbt --profiles-dir dbt

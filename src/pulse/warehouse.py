@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from typing import Any
 import httpx
 
 from pulse import load
+from pulse.http import request
 
 CATALOG = "workspace"
 # dataset -> path under DATA_DIR (file or directory of parquet files)
@@ -38,6 +40,55 @@ def _env(name: str) -> str:
 
 def host() -> str:
     return _env("DATABRICKS_HOST").removeprefix("https://").rstrip("/")
+
+
+def api() -> httpx.Client:
+    return httpx.Client(
+        base_url=f"https://{host()}",
+        headers={"Authorization": f"Bearer {_env('DATABRICKS_TOKEN')}"},
+        timeout=120,
+    )
+
+
+class WarehouseUnavailable(RuntimeError):
+    """The SQL warehouse did not reach RUNNING in time."""
+
+
+def wake(
+    http: httpx.Client | None = None,
+    timeout: float = 600,
+    poll: float = 15,
+    log: Callable[[str], None] = print,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Start the SQL warehouse through the API and wait until it is RUNNING.
+
+    Connecting starts a stopped warehouse too, but on 2026-10-28..30 that start was refused
+    ("Cannot create the resource") on every run, while an explicit start went through at once.
+    """
+    http = http or api()
+    path = f"/api/2.0/sql/warehouses/{_env('DATABRICKS_HTTP_PATH').rstrip('/').rsplit('/', 1)[-1]}"
+    deadline = clock() + timeout
+    last_error = ""
+    while True:
+        state = request(http, "GET", path).json()["state"]
+        if state == "RUNNING":
+            log("warehouse is running")
+            return
+        if state in {"DELETING", "DELETED"}:
+            raise WarehouseUnavailable(f"warehouse is {state}; check DATABRICKS_HTTP_PATH")
+        if state == "STOPPED":
+            log("warehouse is stopped; starting it")
+            try:
+                request(http, "POST", f"{path}/start")
+            except httpx.HTTPStatusError as e:
+                last_error = e.response.text[:300]
+                log(f"start refused: {last_error}")
+        if clock() >= deadline:
+            detail = f" (last error: {last_error})" if last_error else ""
+            raise WarehouseUnavailable(f"still {state} after {timeout:.0f}s{detail}")
+        sleep(poll)
 
 
 def connect() -> Any:
@@ -81,11 +132,7 @@ def load_raw(raw_schema: str, log: Callable[[str], None] = print) -> dict[str, i
     """Upload every dataset present on disk and (re)create its raw table. Returns row counts."""
     schema = _check_ident(raw_schema)
     volume = f"/Volumes/{CATALOG}/{schema}/landing"
-    http = httpx.Client(
-        base_url=f"https://{host()}",
-        headers={"Authorization": f"Bearer {_env('DATABRICKS_TOKEN')}"},
-        timeout=120,
-    )
+    http = api()
     counts: dict[str, int] = {}
     with connect() as conn, conn.cursor() as cur:
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")

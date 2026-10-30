@@ -57,6 +57,20 @@ def extract(
     typer.echo(f"extracted={n} quarantined={bad}")
 
 
+@app.command("wake-warehouse")
+def wake_warehouse(
+    timeout: Annotated[int, typer.Option(help="Seconds to wait for RUNNING.")] = 600,
+) -> None:
+    """Start the Databricks SQL warehouse and wait until it accepts connections."""
+    from pulse import warehouse
+
+    try:
+        warehouse.wake(timeout=timeout, log=typer.echo)
+    except warehouse.WarehouseUnavailable as e:
+        typer.echo(f"::error title=Databricks warehouse would not start::{e}")
+        raise typer.Exit(1) from e
+
+
 @app.command("load-warehouse")
 def load_warehouse(
     raw_schema: Annotated[str, typer.Option(help="Databricks raw schema.")] = "pulse_raw",

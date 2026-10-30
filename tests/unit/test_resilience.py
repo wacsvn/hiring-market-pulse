@@ -1,6 +1,7 @@
-"""Retries for flaky APIs, and a refresh that survives a BLS outage.
+"""Retries for flaky APIs, a refresh that survives a BLS outage, and waking the warehouse.
 
-Found in production: BLS returned 503 for hours and the whole daily refresh failed.
+Found in production: BLS returned 503 for hours and the whole daily refresh failed; later,
+the Databricks warehouse refused to auto-start on connect for three days running.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from pulse import http, pipeline
+from pulse import http, pipeline, warehouse
 from pulse.sources.bls_jolts import BLSClient
 from pulse.sources.hn_algolia import BASE_URL, HNClient
 from tests.conftest import hn_transport
@@ -88,3 +89,57 @@ def test_refresh_continues_when_bls_is_down(
     assert any(p.suffix == ".parquet" for p in (tmp_path / "raw" / "hn_posts").iterdir())
     assert previous.read_bytes() == b"last good JOLTS data"
     assert any("BLS JOLTS unavailable" in line for line in logs)
+
+
+def _warehouse(states: list[str], start_status: int = 200) -> tuple[httpx.Client, list[str]]:
+    """A warehouse API reporting `states` in turn (the last repeats). Returns (client, starts)."""
+    seen = 0
+    starts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen
+        if request.method == "POST":
+            starts.append(request.url.path)
+            return httpx.Response(start_status, text="Cannot create the resource")
+        state = states[min(seen, len(states) - 1)]
+        seen += 1
+        return httpx.Response(200, json={"state": state})
+
+    return httpx.Client(base_url="https://dbx.test", transport=httpx.MockTransport(handler)), starts
+
+
+@pytest.fixture
+def warehouse_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABRICKS_HTTP_PATH", "/sql/1.0/warehouses/abc123")
+
+
+@pytest.mark.usefixtures("warehouse_env")
+def test_wake_starts_a_stopped_warehouse_and_waits() -> None:
+    client, starts = _warehouse(["STOPPED", "STARTING", "RUNNING"])
+    waits: list[float] = []
+    warehouse.wake(client, poll=15, log=lambda _: None, sleep=waits.append, clock=lambda: 0)
+    assert starts == ["/api/2.0/sql/warehouses/abc123/start"]
+    assert waits == [15, 15]
+
+
+@pytest.mark.usefixtures("warehouse_env")
+def test_wake_does_nothing_when_already_running() -> None:
+    client, starts = _warehouse(["RUNNING"])
+    warehouse.wake(client, log=lambda _: None, sleep=lambda _: None)
+    assert starts == []
+
+
+@pytest.mark.usefixtures("warehouse_env")
+def test_wake_gives_up_with_the_refusal_reason() -> None:
+    client, starts = _warehouse(["STOPPED"], start_status=400)
+    now = iter(range(0, 10_000, 15))
+    with pytest.raises(warehouse.WarehouseUnavailable, match="Cannot create the resource"):
+        warehouse.wake(
+            client,
+            timeout=60,
+            poll=15,
+            log=lambda _: None,
+            sleep=lambda _: None,
+            clock=lambda: next(now),
+        )
+    assert len(starts) == 4  # tried again on every poll until the deadline
