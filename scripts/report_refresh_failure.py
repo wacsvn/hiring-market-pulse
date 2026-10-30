@@ -26,6 +26,13 @@ def summary() -> str:
         f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
     )
     lines = [f"Scheduled refresh failed: {run_url}", ""]
+    if os.environ.get("WAREHOUSE_OUTCOME") == "failure":
+        lines.append(
+            "The Databricks SQL warehouse would not start, so nothing ran. Start it by hand "
+            "(Databricks > SQL Warehouses > Start), then re-run this workflow. If Start fails "
+            "too, the UI shows why (quota, billing, or capacity)."
+        )
+        return "\n".join(lines)
     if not RUN_RESULTS.exists():
         lines.append("dbt did not run; the failure happened earlier (ingest, extract, or load).")
         return "\n".join(lines)
