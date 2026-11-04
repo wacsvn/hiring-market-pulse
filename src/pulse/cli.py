@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
@@ -68,6 +69,9 @@ def wake_warehouse(
         warehouse.wake(timeout=timeout, log=typer.echo)
     except warehouse.WarehouseUnavailable as e:
         typer.echo(f"::error title=Databricks warehouse would not start::{e}")
+        if out := os.environ.get("GITHUB_OUTPUT"):  # lets the failure report quote the reason
+            with open(out, "a") as f:
+                f.write(f"error={e}\n")
         raise typer.Exit(1) from e
 
 

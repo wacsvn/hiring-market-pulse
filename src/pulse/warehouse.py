@@ -54,6 +54,21 @@ class WarehouseUnavailable(RuntimeError):
     """The SQL warehouse did not reach RUNNING in time."""
 
 
+def _workspace_block(resp: httpx.Response) -> str | None:
+    """The deny reason if Databricks' gatekeeper has blocked the workspace, else None.
+
+    Seen 2026-11-03: denyReason INACTIVE, which a UI login clears and retrying never does.
+    """
+    try:
+        details = resp.json().get("details", [])
+    except ValueError:
+        return None
+    for d in details:
+        if d.get("reason") == "DENY_NEW_AND_EXISTING_RESOURCES":
+            return str(d.get("metadata", {}).get("denyReason", "no reason given"))
+    return None
+
+
 def wake(
     http: httpx.Client | None = None,
     timeout: float = 600,
@@ -83,6 +98,11 @@ def wake(
             try:
                 request(http, "POST", f"{path}/start")
             except httpx.HTTPStatusError as e:
+                if blocked := _workspace_block(e.response):
+                    raise WarehouseUnavailable(
+                        f"Databricks has blocked compute for the whole workspace ({blocked}). "
+                        "Log in to the Databricks UI to reactivate it, then re-run."
+                    ) from e
                 last_error = e.response.text[:300]
                 log(f"start refused: {last_error}")
         if clock() >= deadline:

@@ -69,4 +69,5 @@ jobs:
         if: failure()
         env:
           WAREHOUSE_OUTCOME: ${{ steps.warehouse.outcome }}
+          WAREHOUSE_ERROR: ${{ steps.warehouse.outputs.error }}
         run: uv run python scripts/report_refresh_failure.py

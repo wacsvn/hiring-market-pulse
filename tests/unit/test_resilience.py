@@ -143,3 +143,29 @@ def test_wake_gives_up_with_the_refusal_reason() -> None:
             clock=lambda: next(now),
         )
     assert len(starts) == 4  # tried again on every poll until the deadline
+
+
+@pytest.mark.usefixtures("warehouse_env")
+def test_wake_fails_fast_when_the_workspace_is_blocked() -> None:
+    """Databricks' gatekeeper blocks inactive workspaces; retrying for 10 minutes can't help."""
+    blocked = {
+        "error_code": "BAD_REQUEST",
+        "details": [
+            {
+                "reason": "DENY_NEW_AND_EXISTING_RESOURCES",
+                "domain": "resource-gatekeeper",
+                "metadata": {"denyReason": "INACTIVE"},
+            }
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(400, json=blocked)
+        return httpx.Response(200, json={"state": "STOPPED"})
+
+    client = httpx.Client(base_url="https://dbx.test", transport=httpx.MockTransport(handler))
+    waits: list[float] = []
+    with pytest.raises(warehouse.WarehouseUnavailable, match=r"INACTIVE.*Log in"):
+        warehouse.wake(client, log=lambda _: None, sleep=waits.append)
+    assert waits == []

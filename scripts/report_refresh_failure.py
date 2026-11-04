@@ -27,6 +27,8 @@ def summary() -> str:
     )
     lines = [f"Scheduled refresh failed: {run_url}", ""]
     if os.environ.get("WAREHOUSE_OUTCOME") == "failure":
+        if reason := os.environ.get("WAREHOUSE_ERROR"):
+            lines += [f"> {reason}", ""]
         lines.append(
             "The Databricks SQL warehouse would not start, so nothing ran. Start it by hand "
             "(Databricks > SQL Warehouses > Start), then re-run this workflow. If Start fails "
