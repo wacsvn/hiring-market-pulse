@@ -13,12 +13,16 @@ test.describe('live dashboard', () => {
     // Visit the public page, as a reader would. Free Streamlit apps sleep after ~12 hours
     // without visitors and show a "wake up" button on this page (the bare app URL just stays
     // blank), so press it if it's there. This visit is also what keeps the app awake.
+    // isVisible() checks once without waiting, and the sleep page draws its button a moment
+    // after load, so a single check missed it (Nov 2026: four failed runs, app left asleep).
+    // Keep pressing it whenever it shows until the dashboard renders.
     await page.goto(LIVE_URL!, { timeout: 120_000 });
     const wake = page.getByRole('button', { name: /get this app back up/i });
-    if (await wake.isVisible({ timeout: 15_000 }).catch(() => false)) await wake.click();
-
     const app = page.frameLocator('iframe[title="streamlitApp"]');
-    await expect(app.locator('.st-key-kpi-posts')).toBeVisible({ timeout: 300_000 });
+    await expect(async () => {
+      if (await wake.isVisible()) await wake.click();
+      await expect(app.locator('.st-key-kpi-posts')).toBeVisible({ timeout: 10_000 });
+    }).toPass({ timeout: 360_000 });
     await expect(app.locator('.st-key-trust-banner')).toContainText('data checks passed');
     for (const key of ['posts', 'remote', 'salary-share', 'median-salary']) {
       await expect(app.locator(`.st-key-kpi-${key} [data-testid="stMetricValue"]`)).not.toBeEmpty();
