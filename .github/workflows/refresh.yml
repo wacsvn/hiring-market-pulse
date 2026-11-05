@@ -2,7 +2,8 @@ name: Refresh data
 
 # Daily: fetch -> validate -> extract -> load -> dbt build (tests gate publishing) -> publish.
 # The dashboard reads the `data-latest` release, so a failed run leaves it on the last
-# good data instead of showing anything unvalidated.
+# good data instead of showing anything unvalidated. If Databricks is unavailable (its free
+# tier blocks inactive workspaces), the same models and tests run on DuckDB in the runner.
 on:
   schedule:
     - cron: "17 11 * * *"
@@ -33,9 +34,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
-      - name: Start the warehouse (waits up to 10 minutes)
-        id: warehouse
-        run: uv run pulse wake-warehouse
+      - name: Pick the warehouse (Databricks, or DuckDB if Databricks is unavailable)
+        run: uv run pulse wake-warehouse --fallback
       - name: Check warehouse connectivity
         run: uv run dbt debug --project-dir dbt --profiles-dir dbt
       - name: Ingest (36 months of threads + BLS JOLTS)
@@ -67,6 +67,4 @@ jobs:
           if-no-files-found: ignore
       - name: Report failure
         if: failure()
-        env:
-          WAREHOUSE_OUTCOME: ${{ steps.warehouse.outcome }}
         run: uv run python scripts/report_refresh_failure.py

@@ -40,13 +40,23 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
-      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      # The docs read the production catalog, which only Databricks has. If it is
+      # unavailable, keep the last published site rather than fail.
+      - name: Check Databricks is available
+        run: uv run pulse wake-warehouse --fallback
+      - if: env.PULSE_ENGINE != 'duckdb'
+        run: uv run dbt deps --project-dir dbt --profiles-dir dbt
       - name: Generate docs (read-only; compiles models and reads the catalog)
+        if: env.PULSE_ENGINE != 'duckdb'
         run: uv run dbt docs generate --static --project-dir dbt --profiles-dir dbt
-      - run: mkdir site && cp dbt/target/static_index.html site/index.html
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - if: env.PULSE_ENGINE != 'duckdb'
+        run: mkdir site && cp dbt/target/static_index.html site/index.html
+      - if: env.PULSE_ENGINE != 'duckdb'
+        uses: actions/configure-pages@v6
+      - if: env.PULSE_ENGINE != 'duckdb'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deploy
+        if: env.PULSE_ENGINE != 'duckdb'
         uses: actions/deploy-pages@v5

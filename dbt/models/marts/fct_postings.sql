@@ -22,6 +22,6 @@ select
             then (e.salary_min + e.salary_max) / 2.0
     end as salary_usd_annual_mid,
     e.extractor,
-    p.thread_month < date_trunc('month', current_date()) as is_complete_month
+    p.thread_month < date_trunc('month', current_date) as is_complete_month
 from {{ ref('stg_hn_posts') }} as p
 inner join {{ ref('stg_extractions') }} as e using (post_id)

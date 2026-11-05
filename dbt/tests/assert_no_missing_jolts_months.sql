@@ -6,7 +6,7 @@ with bounds as (
 ),
 
 expected as (
-    select measure, explode(sequence(lo, hi, interval 1 month)) as month from bounds
+    select measure, {{ month_series("lo", "hi") }} as month from bounds
 )
 
 select e.measure, e.month

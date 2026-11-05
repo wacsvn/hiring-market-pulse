@@ -5,7 +5,7 @@ with counts as (
     select t.thread_month, count(p.post_id) as postings
     from {{ ref('stg_hn_threads') }} as t
     left join {{ ref('stg_hn_posts') }} as p using (thread_id)
-    where t.thread_month < date_trunc('month', current_date())
+    where t.thread_month < date_trunc('month', current_date)
     group by t.thread_month
 )
 

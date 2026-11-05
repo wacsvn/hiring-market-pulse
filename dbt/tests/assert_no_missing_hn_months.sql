@@ -4,7 +4,7 @@ with bounds as (
 ),
 
 expected as (
-    select explode(sequence(lo, hi, interval 1 month)) as month from bounds
+    select {{ month_series("lo", "hi") }} as month from bounds
 )
 
 select e.month

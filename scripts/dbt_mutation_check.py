@@ -5,9 +5,10 @@ models upstream of the target test are rebuilt, and the run must report that tes
 as FAILED. A test that still passes on corrupted data is a test that can't fail.
 
 Usage: uv run python scripts/dbt_mutation_check.py --source-schema pulse_dev_raw
-Needs DATABRICKS_* env vars. The mutant schemas (<source>_mut, <source>_mut_dbt) are kept and
-reused: every table in them is rewritten in place on each run. Dropping them after each run
-would count every table against the workspace's table quota for 7 days.
+Needs DATABRICKS_* env vars, or PULSE_ENGINE=duckdb. The mutant schemas (<source>_mut,
+<source>_mut_dbt) are kept and reused: every table in them is rewritten in place on each run.
+Dropping them after each run would count every table against the workspace's table quota
+for 7 days.
 """
 
 from __future__ import annotations
@@ -75,7 +76,7 @@ MUTATIONS = [
         ("bls_jolts",),
         (
             "DELETE FROM {s}.bls_jolts WHERE measure = 'openings' AND month = "
-            "(SELECT add_months(min(month), 3) FROM {s}.bls_jolts)",
+            "(SELECT min(month) + INTERVAL 3 MONTH FROM {s}.bls_jolts)",
         ),
     ),
     Mutation(
@@ -130,8 +131,8 @@ MUTATIONS = [
         "assert_quarantine_rate_below_5pct",
         ("quarantine",),
         (
-            "INSERT INTO {s}.quarantine SELECT 'hn_posts', CAST(id AS STRING), 'synthetic', "
-            "'', current_timestamp(), NULL, current_timestamp() FROM range(50)",
+            "INSERT INTO {s}.quarantine SELECT 'hn_posts', CAST(uuid() AS STRING), "
+            "'synthetic', '', current_timestamp, NULL, current_timestamp FROM range(50)",
         ),
     ),
 ]

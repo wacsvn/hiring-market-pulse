@@ -972,6 +972,21 @@ wheels = [
 ]
 
 [[package]]
+name = "dbt-duckdb"
+version = "1.11.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dbt-adapters" },
+    { name = "dbt-common" },
+    { name = "dbt-core" },
+    { name = "duckdb" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f8/94/b72a93bf25812f69c1db2d69231a0f90597b2ac00e50686e837e3fab0efb/dbt_duckdb-1.11.1.tar.gz", hash = "sha256:4fe54c1aea840ccf4725a01851049be2bbe2d4c023faaad044c616505c780b45", size = 205777, upload-time = "2026-10-26T16:39:42.304Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/86/e03b77fe7c5298d89df933a541ddf530d462684626d4347e8132d4e8fb57/dbt_duckdb-1.11.1-py3-none-any.whl", hash = "sha256:81340c41a1bd0f8189109d3a61c394c08a636e482af0124a06765e9a41f44bcd", size = 109228, upload-time = "2026-10-26T16:39:40.776Z" },
+]
+
+[[package]]
 name = "dbt-extractor"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1253,6 +1268,7 @@ warehouse = [
     { name = "databricks-sql-connector" },
     { name = "dbt-core" },
     { name = "dbt-databricks" },
+    { name = "dbt-duckdb" },
 ]
 
 [package.dev-dependencies]
@@ -1273,6 +1289,7 @@ requires-dist = [
     { name = "databricks-sql-connector", marker = "extra == 'warehouse'", specifier = ">=3.4" },
     { name = "dbt-core", marker = "extra == 'warehouse'", specifier = ">=1.8" },
     { name = "dbt-databricks", marker = "extra == 'warehouse'", specifier = ">=1.8" },
+    { name = "dbt-duckdb", marker = "extra == 'warehouse'", specifier = ">=1.8" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "ipykernel", marker = "extra == 'analysis'", specifier = ">=7.4.0" },
     { name = "jupyter", marker = "extra == 'analysis'", specifier = ">=1.1.1" },

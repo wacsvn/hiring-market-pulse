@@ -18,3 +18,5 @@ e2e/test-results/
 e2e/playwright-report/
 dbt/.user.yml
 e2e/results/
+*.duckdb
+*.duckdb.wal

@@ -35,6 +35,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
+      - name: Pick the warehouse (Databricks, or DuckDB if Databricks is unavailable)
+        run: uv run pulse wake-warehouse --fallback
       - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
       - run: uv run python scripts/build_fixture_data.py
       - run: uv run pulse load-warehouse --raw-schema "$RAW"
