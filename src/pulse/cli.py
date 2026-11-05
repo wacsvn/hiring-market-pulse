@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 
 from pulse import pipeline, quality
@@ -61,18 +62,33 @@ def extract(
 @app.command("wake-warehouse")
 def wake_warehouse(
     timeout: Annotated[int, typer.Option(help="Seconds to wait for RUNNING.")] = 600,
+    fallback: Annotated[
+        bool, typer.Option(help="If Databricks is unavailable, use DuckDB for the rest of the job.")
+    ] = False,
 ) -> None:
     """Start the Databricks SQL warehouse and wait until it accepts connections."""
     from pulse import warehouse
 
     try:
         warehouse.wake(timeout=timeout, log=typer.echo)
-    except warehouse.WarehouseUnavailable as e:
-        typer.echo(f"::error title=Databricks warehouse would not start::{e}")
-        if out := os.environ.get("GITHUB_OUTPUT"):  # lets the failure report quote the reason
+    except (warehouse.WarehouseUnavailable, httpx.HTTPError, RuntimeError) as e:
+        if not fallback:
+            typer.echo(f"::error title=Databricks warehouse would not start::{e}")
+            raise typer.Exit(1) from e
+        # A warning, not a failure: the run still builds and tests everything, on DuckDB.
+        typer.echo(f"::warning title=Built on DuckDB (Databricks unavailable)::{e}")
+        env = {
+            "PULSE_ENGINE": "duckdb",
+            "DBT_TARGET": "duckdb",
+            "PULSE_DUCKDB_PATH": str(warehouse.duckdb_path()),
+        }
+        if out := os.environ.get("GITHUB_ENV"):  # applies to the job's later steps
             with open(out, "a") as f:
-                f.write(f"error={e}\n")
-        raise typer.Exit(1) from e
+                f.writelines(f"{k}={v}\n" for k, v in env.items())
+        else:
+            typer.echo(
+                "To use DuckDB here: " + " ".join(f"export {k}={v};" for k, v in env.items())
+            )
 
 
 @app.command("load-warehouse")
@@ -100,7 +116,11 @@ def export_marts(
     from pulse import warehouse
 
     warehouse.export_marts(schema, out, log=typer.echo)
-    meta: dict[str, object] = {"exported_at": datetime.now(UTC).isoformat(), "schema": schema}
+    meta: dict[str, object] = {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "schema": schema,
+        "engine": warehouse.engine(),
+    }
     if dbt_results and dbt_results.exists():
         meta["dbt"] = quality.summarise_run_results(json.loads(dbt_results.read_text()))
     if audit_results.exists():

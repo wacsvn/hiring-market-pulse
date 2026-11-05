@@ -4,7 +4,9 @@ with recent as (
     select *
     from {{ ref('fct_postings') }}
     where salary_usd_annual_mid is not null
-      and thread_month > add_months((select max(thread_month) from {{ ref('fct_postings') }}), -12)
+      and thread_month > {{ dbt.dateadd(
+          'month', -12, "(select max(thread_month) from " ~ ref('fct_postings') ~ ")"
+      ) }}
 )
 
 select
@@ -12,8 +14,8 @@ select
     seniority,
     count(*) as sample_size,
     count(*) >= 20 as is_reliable,
-    percentile_approx(salary_usd_annual_mid, 0.25) as p25_usd,
-    percentile_approx(salary_usd_annual_mid, 0.5) as median_usd,
-    percentile_approx(salary_usd_annual_mid, 0.75) as p75_usd
+    {{ percentile("salary_usd_annual_mid", 0.25) }} as p25_usd,
+    {{ percentile("salary_usd_annual_mid", 0.5) }} as median_usd,
+    {{ percentile("salary_usd_annual_mid", 0.75) }} as p75_usd
 from recent
 group by primary_role_family, seniority

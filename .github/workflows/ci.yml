@@ -65,10 +65,9 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras --locked
-      - name: Start the warehouse (waits up to 10 minutes)
-        run: uv run pulse wake-warehouse
+      - name: Pick the warehouse (Databricks, or DuckDB if Databricks is unavailable)
+        run: uv run pulse wake-warehouse --fallback
       - name: Check warehouse connectivity
-        # Fails here (not in a test step) if Databricks is unreachable or over its daily quota.
         run: uv run dbt debug --project-dir dbt --profiles-dir dbt
       - name: Build fixture dataset (same pipeline code as production, recorded API responses)
         run: uv run python scripts/build_fixture_data.py

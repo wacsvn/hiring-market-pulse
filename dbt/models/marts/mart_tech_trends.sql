@@ -1,6 +1,6 @@
 -- How often each technology is mentioned, per month. Grain: month x tech.
 with exploded as (
-    select thread_month, post_id, explode(tech) as tech
+    select thread_month, post_id, {{ unnest_array("tech") }} as tech
     from {{ ref('fct_postings') }}
 ),
 

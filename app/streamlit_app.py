@@ -104,6 +104,11 @@ with st.container(key="hero"):
                     f"{dbt_meta.get('tests_total', 0)}** data checks passed on the last "
                     "refresh" + (f" · {warned} flagged for review" if warned else "") + " · "
                     f"updated {str(marts.metadata.get('exported_at', ''))[:10]}"
+                    + (
+                        " · built on DuckDB (backup while Databricks is unavailable)"
+                        if marts.metadata.get("engine") == "duckdb"
+                        else ""
+                    )
                 )
         months = list(monthly["thread_month"].dt.to_pydatetime())
         start, end = st.select_slider(

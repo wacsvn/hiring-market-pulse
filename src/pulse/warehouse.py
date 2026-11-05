@@ -1,8 +1,10 @@
-"""Load local raw parquet into Databricks.
+"""Load local raw parquet into the warehouse: Databricks, or DuckDB as the fallback.
 
-Files go to a Unity Catalog volume (<catalog>.<raw_schema>.landing) via the Files API,
-then each dataset becomes a Delta table with CREATE OR REPLACE ... read_files(). Raw
-tables are a full snapshot of the parquet, so loads are idempotent and easy to rerun.
+Databricks: files go to a Unity Catalog volume (<catalog>.<raw_schema>.landing) via the
+Files API, then each dataset becomes a Delta table with CREATE OR REPLACE ... read_files().
+DuckDB (PULSE_ENGINE=duckdb): the same tables, read straight from the parquet into a local
+file named after the catalog, so dbt sees identical names. Raw tables are a full snapshot of
+the parquet either way, so loads are idempotent and easy to rerun.
 """
 
 from __future__ import annotations
@@ -36,6 +38,17 @@ def _env(name: str) -> str:
     if not value:
         raise RuntimeError(f"{name} is not set")
     return value
+
+
+def engine() -> str:
+    """databricks (default) or duckdb, the fallback when Databricks is unavailable."""
+    return os.environ.get("PULSE_ENGINE", "databricks")
+
+
+def duckdb_path() -> Path:
+    # Named after the catalog: DuckDB uses the file stem as the database name.
+    default = load.data_dir() / f"{CATALOG}.duckdb"
+    return Path(os.environ.get("PULSE_DUCKDB_PATH", default)).resolve()
 
 
 def host() -> str:
@@ -112,6 +125,11 @@ def wake(
 
 
 def connect() -> Any:
+    if engine() == "duckdb":
+        import duckdb
+
+        # UTC like Databricks, so timestamps and "the current month" match either way.
+        return duckdb.connect(str(duckdb_path()), config={"TimeZone": "UTC"})
     from databricks import sql  # imported lazily: only the warehouse extra installs it
 
     return sql.connect(
@@ -148,22 +166,51 @@ def _delete_stale(http: httpx.Client, folder: str, keep: set[str]) -> None:
             http.delete(f"/api/2.0/fs/files{entry['path']}").raise_for_status()
 
 
+def _dataset_files(log: Callable[[str], None]) -> list[tuple[str, list[Path]]]:
+    found = []
+    for dataset, rel in DATASETS.items():
+        src = load.data_dir() / rel
+        files = sorted(src.glob("*.parquet")) if src.is_dir() else [src]
+        files = [f for f in files if f.exists()]
+        if files:
+            found.append((dataset, files))
+        else:
+            log(f"skip {dataset}: nothing on disk")
+    return found
+
+
+def _load_raw_duckdb(schema: str, log: Callable[[str], None]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    with connect() as conn:
+        conn.execute(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
+        for dataset, files in _dataset_files(log):
+            table = f"{CATALOG}.{schema}.{dataset}"
+            paths = ", ".join("'" + str(f.resolve()).replace("'", "''") + "'" for f in files)
+            # Same columns as read_files on Databricks, which adds _rescued_data for values
+            # that don't fit the schema; parquet we wrote ourselves never has any.
+            conn.execute(
+                f"CREATE OR REPLACE TABLE {table} AS "
+                f"SELECT *, CAST(NULL AS VARCHAR) AS _rescued_data, "
+                f"current_timestamp AS _loaded_at "
+                f"FROM read_parquet([{paths}], union_by_name = true)"
+            )
+            counts[dataset] = int(conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+            log(f"loaded {table}: {counts[dataset]} rows from {len(files)} file(s)")
+    return counts
+
+
 def load_raw(raw_schema: str, log: Callable[[str], None] = print) -> dict[str, int]:
     """Upload every dataset present on disk and (re)create its raw table. Returns row counts."""
     schema = _check_ident(raw_schema)
+    if engine() == "duckdb":
+        return _load_raw_duckdb(schema, log)
     volume = f"/Volumes/{CATALOG}/{schema}/landing"
     http = api()
     counts: dict[str, int] = {}
     with connect() as conn, conn.cursor() as cur:
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
         cur.execute(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{schema}.landing")
-        for dataset, rel in DATASETS.items():
-            src = load.data_dir() / rel
-            files = sorted(src.glob("*.parquet")) if src.is_dir() else [src]
-            files = [f for f in files if f.exists()]
-            if not files:
-                log(f"skip {dataset}: nothing on disk")
-                continue
+        for dataset, files in _dataset_files(log):
             for f in files:
                 _upload(http, f, f"{volume}/{dataset}/{f.name}")
             _delete_stale(http, f"{volume}/{dataset}", keep={f.name for f in files})

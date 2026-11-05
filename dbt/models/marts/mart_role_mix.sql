@@ -1,6 +1,6 @@
 -- Postings per role family per month. A post can list several families. Grain: month x family.
 with exploded as (
-    select thread_month, post_id, explode(role_families) as role_family
+    select thread_month, post_id, {{ unnest_array("role_families") }} as role_family
     from {{ ref('fct_postings') }}
 ),
 

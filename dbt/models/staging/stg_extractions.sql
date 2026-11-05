@@ -7,7 +7,7 @@ select
     nullif(trim(company), '') as company,
     work_mode,
     role_families,
-    element_at(role_families, 1) as primary_role_family,
+    {{ first_element("role_families") }} as primary_role_family,
     seniority,
     locations,
     cast(salary_min as bigint) as salary_min,

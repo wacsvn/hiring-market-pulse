@@ -12,3 +12,12 @@ pulse:
       threads: 4
       connect_retries: 3
       connect_timeout: 60
+    # Fallback when Databricks is unavailable (`pulse wake-warehouse --fallback` selects it).
+    # A local file named after the catalog, so source and model names match Databricks.
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('PULSE_DUCKDB_PATH', 'workspace.duckdb') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'pulse_dev') }}"
+      threads: 4
+      settings:
+        TimeZone: UTC

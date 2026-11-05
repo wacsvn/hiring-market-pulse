@@ -169,3 +169,65 @@ def test_wake_fails_fast_when_the_workspace_is_blocked() -> None:
     with pytest.raises(warehouse.WarehouseUnavailable, match=r"INACTIVE.*Log in"):
         warehouse.wake(client, log=lambda _: None, sleep=waits.append)
     assert waits == []
+
+
+def test_fallback_switches_the_job_to_duckdb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Databricks blocked: the step passes with a warning and later steps use DuckDB."""
+    from typer.testing import CliRunner
+
+    from pulse.cli import app
+
+    def blocked(**_: object) -> None:
+        raise warehouse.WarehouseUnavailable("blocked (INACTIVE)")
+
+    monkeypatch.setattr(warehouse, "wake", blocked)
+    monkeypatch.setenv("PULSE_DATA_DIR", str(tmp_path))
+    github_env = tmp_path / "github_env"
+    monkeypatch.setenv("GITHUB_ENV", str(github_env))
+
+    result = CliRunner().invoke(app, ["wake-warehouse", "--fallback"])
+
+    assert result.exit_code == 0
+    assert "::warning title=Built on DuckDB" in result.output
+    lines = github_env.read_text().splitlines()
+    assert "PULSE_ENGINE=duckdb" in lines and "DBT_TARGET=duckdb" in lines
+    assert f"PULSE_DUCKDB_PATH={tmp_path.resolve() / 'workspace.duckdb'}" in lines
+
+
+def test_without_fallback_an_unavailable_warehouse_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    from typer.testing import CliRunner
+
+    from pulse.cli import app
+
+    def blocked(**_: object) -> None:
+        raise warehouse.WarehouseUnavailable("blocked (INACTIVE)")
+
+    monkeypatch.setattr(warehouse, "wake", blocked)
+    result = CliRunner().invoke(app, ["wake-warehouse"])
+    assert result.exit_code == 1
+    assert "::error" in result.output
+
+
+def test_duckdb_load_matches_the_databricks_table_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same table names and extra columns (_rescued_data, _loaded_at) as read_files gives."""
+    import duckdb
+    import pandas as pd
+
+    monkeypatch.setenv("PULSE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PULSE_ENGINE", "duckdb")
+    monkeypatch.delenv("PULSE_DUCKDB_PATH", raising=False)
+    posts = tmp_path / "raw" / "hn_posts"
+    posts.mkdir(parents=True)
+    pd.DataFrame({"post_id": [1, 2]}).to_parquet(posts / "2026-01.parquet")
+    pd.DataFrame({"post_id": [3]}).to_parquet(posts / "2026-02.parquet")
+
+    counts = warehouse.load_raw("pulse_raw", log=lambda _: None)
+
+    assert counts == {"hn_posts": 3}
+    with duckdb.connect(str(tmp_path / "workspace.duckdb")) as conn:
+        cols = [r[0] for r in conn.execute("DESCRIBE workspace.pulse_raw.hn_posts").fetchall()]
+    assert cols == ["post_id", "_rescued_data", "_loaded_at"]
