@@ -183,7 +183,8 @@ def test_fallback_switches_the_job_to_duckdb(
         raise warehouse.WarehouseUnavailable("blocked (INACTIVE)")
 
     monkeypatch.setattr(warehouse, "wake", blocked)
-    monkeypatch.setenv("PULSE_DATA_DIR", str(tmp_path))
+    data = tmp_path / "data"  # not created: a fresh CI runner has no data/ folder yet
+    monkeypatch.setenv("PULSE_DATA_DIR", str(data))
     github_env = tmp_path / "github_env"
     monkeypatch.setenv("GITHUB_ENV", str(github_env))
 
@@ -193,7 +194,8 @@ def test_fallback_switches_the_job_to_duckdb(
     assert "::warning title=Built on DuckDB" in result.output
     lines = github_env.read_text().splitlines()
     assert "PULSE_ENGINE=duckdb" in lines and "DBT_TARGET=duckdb" in lines
-    assert f"PULSE_DUCKDB_PATH={tmp_path.resolve() / 'workspace.duckdb'}" in lines
+    assert f"PULSE_DUCKDB_PATH={data.resolve() / 'workspace.duckdb'}" in lines
+    assert data.is_dir()
 
 
 def test_without_fallback_an_unavailable_warehouse_fails(monkeypatch: pytest.MonkeyPatch) -> None:

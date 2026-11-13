@@ -11,7 +11,7 @@
 [Case study: tests that couldn't fail](docs/case-studies/tests-that-couldnt-fail.md) ·
 [Incident report](docs/incidents/2026-10-22-refresh-failures.md)
 
-> **In short:** a daily pipeline loads 11,500+ job posts and official labor data into
+> **In short:** a weekly pipeline loads 11,500+ job posts and official labor data into
 > Databricks, models them with dbt, and publishes a dashboard only after 52 data tests
 > pass. The tests are themselves tested (11/11 injected faults caught), and the
 > free-text extraction is scored against hand-checked posts (work mode 98% accurate).
@@ -84,7 +84,7 @@ flowchart LR
    (`read_files`), with schema-drift capture.
 4. **Model:** [dbt](dbt/models) builds staging views and marts: monthly KPIs, role mix,
    tech trends, salary bands, and the HN-vs-JOLTS comparison.
-5. **Test and publish:** the daily [refresh workflow](.github/workflows/refresh.yml)
+5. **Test and publish:** the weekly [refresh workflow](.github/workflows/refresh.yml)
    publishes the marts only if `dbt build` passes; otherwise it opens an issue.
 6. **Present:** the [Streamlit app](app/streamlit_app.py) reads the published marts and
    shows its own data-quality status ("51 of 52 checks passed").
@@ -184,12 +184,12 @@ flowchart LR
   PR --> MERGE([merge to main])
   MERGE --> APP[Streamlit app redeploys]
   MERGE --> DOCS[dbt docs site republishes]
-  subgraph DAILY["Daily"]
+  subgraph SCHEDULED["Scheduled"]
     direction TB
-    R["Refresh: ingest → load → dbt build"] -->|all tests pass| PUB[Publish data to the app]
+    R["Weekly refresh: ingest → load → dbt build"] -->|all tests pass| PUB[Publish data to the app]
     R -->|a test fails| ISS[Open an issue, keep last good data]
     PUB --> DOCS2[Republish docs]
-    SMOKE[Smoke test the live site]
+    SMOKE[Smoke test the live site, every 8 hours]
   end
 ```
 
@@ -197,7 +197,7 @@ flowchart LR
 |---|---|---|
 | [`ci.yml`](.github/workflows/ci.yml) | every PR and push to `main` | Required checks: pre-commit hooks (lint, format, types), unit tests and the accuracy gate, scrub check, dbt build with all data tests in a dedicated CI schema, Playwright e2e |
 | [`data-test-mutations.yml`](.github/workflows/data-test-mutations.yml) | PRs touching dbt, weekly | Proves the data tests catch 11 kinds of injected faults |
-| [`refresh.yml`](.github/workflows/refresh.yml) | daily | Rebuilds everything from the APIs; publishes only if every hard test passes, otherwise opens an issue |
+| [`refresh.yml`](.github/workflows/refresh.yml) | weekly (Mondays) | Rebuilds everything from the APIs; publishes only if every hard test passes, otherwise opens an issue |
 | [`docs.yml`](.github/workflows/docs.yml) | dbt changes, after each refresh | Publishes the [data model docs](https://wacsvn.github.io/hiring-market-pulse/) |
 | [`live-smoke.yml`](.github/workflows/live-smoke.yml) | every 8 hours | Loads the public page like a visitor (waking the app if it slept) and checks every tab renders |
 
@@ -298,7 +298,7 @@ hiring-market-pulse/
 │   └── img/                    README screenshots
 ├── .github/workflows/
 │   ├── ci.yml                  Required checks on every pull request
-│   ├── refresh.yml             Daily pipeline run; publishes only if tests pass
+│   ├── refresh.yml             Weekly pipeline run; publishes only if tests pass
 │   ├── data-test-mutations.yml Proves the data tests can fail
 │   ├── docs.yml                Publishes the dbt docs site
 │   └── live-smoke.yml          Checks the live dashboard every 8 hours

@@ -1,12 +1,14 @@
 name: Refresh data
 
-# Daily: fetch -> validate -> extract -> load -> dbt build (tests gate publishing) -> publish.
+# Weekly: fetch -> validate -> extract -> load -> dbt build (tests gate publishing) -> publish.
 # The dashboard reads the `data-latest` release, so a failed run leaves it on the last
 # good data instead of showing anything unvalidated. If Databricks is unavailable (its free
 # tier blocks inactive workspaces), the same models and tests run on DuckDB in the runner.
 on:
   schedule:
-    - cron: "17 11 * * *"
+    # Mondays. Both sources are monthly (one HN thread, one JOLTS release), so a weekly run
+    # still picks up each new month within days.
+    - cron: "17 11 * * 1"
   workflow_dispatch:
 
 concurrency:

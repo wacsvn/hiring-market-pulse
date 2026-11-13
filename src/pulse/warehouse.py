@@ -129,6 +129,7 @@ def connect() -> Any:
         import duckdb
 
         # UTC like Databricks, so timestamps and "the current month" match either way.
+        duckdb_path().parent.mkdir(parents=True, exist_ok=True)
         return duckdb.connect(str(duckdb_path()), config={"TimeZone": "UTC"})
     from databricks import sql  # imported lazily: only the warehouse extra installs it
 

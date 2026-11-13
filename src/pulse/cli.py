@@ -77,6 +77,8 @@ def wake_warehouse(
             raise typer.Exit(1) from e
         # A warning, not a failure: the run still builds and tests everything, on DuckDB.
         typer.echo(f"::warning title=Built on DuckDB (Databricks unavailable)::{e}")
+        # A fresh runner has no data/ folder yet, and DuckDB won't create one for its file.
+        warehouse.duckdb_path().parent.mkdir(parents=True, exist_ok=True)
         env = {
             "PULSE_ENGINE": "duckdb",
             "DBT_TARGET": "duckdb",
