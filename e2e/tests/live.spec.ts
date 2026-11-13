@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 // Smoke test of the deployed dashboard. Runs only when LIVE_URL is set (see live-smoke.yml).
-// Live numbers change daily, so this checks that everything renders, not specific values.
+// Live numbers change with each refresh, so this checks that everything renders, not values.
 const LIVE_URL = process.env.LIVE_URL;
 
 test.describe('live dashboard', () => {

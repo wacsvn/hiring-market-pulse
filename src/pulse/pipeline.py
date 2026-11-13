@@ -61,7 +61,7 @@ def ingest(
 
     years = [t.thread_month.year for t in threads.accepted] or [since.year]
     end_year = max(years)
-    # JOLTS updates monthly, so a BLS outage shouldn't block the daily refresh. On failure no
+    # JOLTS updates monthly, so a BLS outage shouldn't block the weekly refresh. On failure no
     # JOLTS file is written, the warehouse load skips the dataset, and the last loaded JOLTS
     # data stays in place. dbt's continuity tests still run on it.
     try:
